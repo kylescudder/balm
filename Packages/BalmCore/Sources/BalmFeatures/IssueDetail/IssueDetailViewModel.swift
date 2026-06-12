@@ -555,7 +555,7 @@ public final class IssueDetailViewModel {
         }
     }
 
-    private static func mapAttachment(_ raw: RawJiraAttachment) -> JiraAttachmentMeta {
+    nonisolated private static func mapAttachment(_ raw: RawJiraAttachment) -> JiraAttachmentMeta {
         JiraAttachmentMeta(
             id: raw.id,
             filename: raw.filename,
