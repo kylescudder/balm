@@ -1,0 +1,55 @@
+name: Balm
+options:
+  bundleIdPrefix: app
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    GENERATE_INFOPLIST_FILE: NO
+    INFOPLIST_FILE: App/Info.plist
+    PRODUCT_NAME: Balm
+    PRODUCT_BUNDLE_IDENTIFIER: app.balm
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "0.1.0"
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  BalmCore:
+    path: Packages/BalmCore
+
+targets:
+  Balm:
+    type: application
+    supportedDestinations: [iOS, iPadOS, macOS]
+    sources:
+      - App
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        CODE_SIGN_ENTITLEMENTS: App/Balm.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: BalmCore
+        product: BalmFeatures
+      - package: BalmCore
+        product: BalmDesignSystem
+      - package: BalmCore
+        product: BalmAPI
+      - package: BalmCore
+        product: BalmAuth
+      - package: BalmCore
+        product: BalmPersistence
+      - package: BalmCore
+        product: BalmModels
