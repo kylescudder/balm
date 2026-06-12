@@ -1,20 +1,67 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Balm
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+A native, keyboard-driven SwiftUI client for **Jira Cloud** — built for a fast, Linear-style workflow on macOS and iOS.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+Balm is **vendor-neutral**: your Jira site, projects, and credentials are all configured at runtime via Atlassian OAuth. Nothing organisation-specific is hardcoded, so any team can point it at their own Jira Cloud instance.
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+## Features
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+- Board and list views with full keyboard navigation
+- Issue detail with rich ADF rendering (formatting, colours, tables, images)
+- In-app image viewer for attachments
+- Create, transition, assign, and edit issues
+- Comments, attachments (upload + preview), labels, sprints, links
+- Offline-aware, OAuth 2.0 (3LO) authentication
+
+## Install (macOS)
+
+Via [Homebrew](https://brew.sh):
+
+```sh
+brew tap kylescudder/tap
+brew install --cask --no-quarantine balm
+```
+
+> **Why `--no-quarantine`?** Balm is currently signed ad-hoc (not notarised with an Apple Developer ID). `--no-quarantine` tells Gatekeeper to trust the download so it launches without a "damaged / unidentified developer" prompt. Once a Developer ID + notarisation pipeline is in place this flag won't be needed.
+
+To update:
+
+```sh
+brew upgrade --cask balm
+```
+
+## Build from source
+
+Requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+
+```sh
+xcodegen generate     # generates Balm.xcodeproj from project.yml
+open Balm.xcodeproj    # build & run the "Balm" scheme
+```
+
+The shared logic lives in the `BalmCore` Swift package (`Packages/BalmCore`) and can be built/tested independently:
+
+```sh
+cd Packages/BalmCore && swift build && swift test
+```
+
+### Auth backend (BFF)
+
+OAuth token exchange requires a small backend (Atlassian's `/oauth/token` needs the client secret, which must never ship in the app). It lives in `Server/` and runs on [Bun](https://bun.sh):
+
+```sh
+cd Server
+cp .env.example .env.local   # fill in your Atlassian OAuth app's CLIENT_ID + CLIENT_SECRET
+bun install
+bun run src/index.ts
+```
+
+Register your own OAuth 2.0 (3LO) app at <https://developer.atlassian.com/console/myapps/>, then set `ATLASSIAN_CLIENT_ID` in `App/Info.plist` and the `Server/.env.local` to match.
+
+## Releases
+
+Tagged releases (`vX.Y.Z`) are built by CI (`.github/workflows/release.yml`) and published to [GitHub Releases](https://github.com/kylescudder/balm/releases) as a zipped universal (`arm64` + `x86_64`) `.app`.
+
+## License
+
+Copyright © 2026 Kyle Scudder. All rights reserved.

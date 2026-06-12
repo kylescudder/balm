@@ -1,0 +1,91 @@
+name: Release
+
+# Build the macOS app and publish a GitHub Release whenever a vX.Y.Z tag is pushed.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Resolve version
+        id: ver
+        run: |
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$REF" >> "$GITHUB_OUTPUT"
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build (Release, ad-hoc signed)
+        run: |
+          xcodebuild \
+            -scheme Balm \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/dd \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package
+        id: pkg
+        run: |
+          APP="build/dd/Build/Products/Release/Balm.app"
+          ZIP="Balm-${{ steps.ver.outputs.version }}-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update release
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" "${{ steps.pkg.outputs.zip }}" \
+            --title "Balm ${{ steps.ver.outputs.version }}" \
+            --notes "Universal (arm64 + x86_64) macOS build.
+          SHA-256: \`${{ steps.pkg.outputs.sha256 }}\`
+
+          Install: \`brew install --cask --no-quarantine kylescudder/tap/balm\`" \
+          || gh release upload "${{ steps.ver.outputs.tag }}" "${{ steps.pkg.outputs.zip }}" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Optional: auto-bump the Homebrew cask if a cross-repo token is configured.
+      # Create a fine-grained PAT with Contents:write on kylescudder/homebrew-tap
+      # and add it as the HOMEBREW_TAP_TOKEN secret to enable this step.
+      - name: Bump Homebrew cask
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          SHA256: ${{ steps.pkg.outputs.sha256 }}
+        run: |
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kylescudder/homebrew-tap.git" tap
+          sed -i '' -E "s/version \".*\"/version \"${VERSION}\"/" tap/Casks/balm.rb
+          sed -i '' -E "s/sha256 \".*\"/sha256 \"${SHA256}\"/" tap/Casks/balm.rb
+          cd tap
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git commit -am "balm ${VERSION}"
+          git push
