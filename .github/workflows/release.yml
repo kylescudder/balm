@@ -17,6 +17,10 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
+    env:
+      # Set the HOMEBREW_TAP_TOKEN repo secret (fine-grained PAT, Contents:write on
+      # kylescudder/homebrew-tap) to auto-bump the cask on release; otherwise skipped.
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +81,6 @@ jobs:
       - name: Bump Homebrew cask
         if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           VERSION: ${{ steps.ver.outputs.version }}
           SHA256: ${{ steps.pkg.outputs.sha256 }}
         run: |
