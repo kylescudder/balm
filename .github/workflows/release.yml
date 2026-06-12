@@ -18,9 +18,9 @@ jobs:
   release:
     runs-on: macos-15
     env:
-      # Set the HOMEBREW_TAP_TOKEN repo secret (fine-grained PAT, Contents:write on
-      # kylescudder/homebrew-tap) to auto-bump the cask on release; otherwise skipped.
-      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      # Write-scoped SSH deploy key for kylescudder/homebrew-tap, used to auto-bump
+      # the cask on release. Stored as the HOMEBREW_TAP_SSH_KEY repo secret.
+      HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,20 +75,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      # Optional: auto-bump the Homebrew cask if a cross-repo token is configured.
-      # Create a fine-grained PAT with Contents:write on kylescudder/homebrew-tap
-      # and add it as the HOMEBREW_TAP_TOKEN secret to enable this step.
+      # Auto-bump the Homebrew cask (version + sha256) in kylescudder/homebrew-tap.
+      # Uses the write-scoped SSH deploy key in HOMEBREW_TAP_SSH_KEY; skipped if unset.
       - name: Bump Homebrew cask
-        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ env.HOMEBREW_TAP_SSH_KEY != '' }}
         env:
           VERSION: ${{ steps.ver.outputs.version }}
           SHA256: ${{ steps.pkg.outputs.sha256 }}
         run: |
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kylescudder/homebrew-tap.git" tap
+          mkdir -p ~/.ssh
+          printf '%s\n' "$HOMEBREW_TAP_SSH_KEY" > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_key -o StrictHostKeyChecking=accept-new"
+          git clone git@github.com:kylescudder/homebrew-tap.git tap
           sed -i '' -E "s/version \".*\"/version \"${VERSION}\"/" tap/Casks/balm.rb
           sed -i '' -E "s/sha256 \".*\"/sha256 \"${SHA256}\"/" tap/Casks/balm.rb
           cd tap
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git commit -am "balm ${VERSION}"
+          git commit -am "balm ${VERSION}" || { echo "no cask change"; exit 0; }
           git push
