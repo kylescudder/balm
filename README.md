@@ -19,10 +19,10 @@ Via [Homebrew](https://brew.sh):
 
 ```sh
 brew tap kylescudder/tap
-brew install --cask --no-quarantine balm
+brew install --cask balm
 ```
 
-> **Why `--no-quarantine`?** Balm is currently signed ad-hoc (not notarised with an Apple Developer ID). `--no-quarantine` tells Gatekeeper to trust the download so it launches without a "damaged / unidentified developer" prompt. Once a Developer ID + notarisation pipeline is in place this flag won't be needed.
+> **A note on signing:** Balm is currently signed ad-hoc (not notarised with an Apple Developer ID). The cask strips the Gatekeeper quarantine flag on install (via a `postflight` step) so the app launches normally. Once a Developer ID + notarisation pipeline is in place this won't be necessary.
 
 To update:
 
