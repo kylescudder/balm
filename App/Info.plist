@@ -23,7 +23,7 @@
 	<key>ATLASSIAN_CLIENT_ID</key>
 	<string>Fsf9GIN1rPtuRFmGGO0OBc4Gn668adTQ</string>
 	<key>BALM_BFF_BASE_URL</key>
-	<string>http://localhost:3000</string>
+	<string>https://auth.balm.kylescudder.co.uk</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
