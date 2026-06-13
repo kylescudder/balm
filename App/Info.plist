@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ATLASSIAN_CLIENT_ID</key>
-	<string>Fsf9GIN1rPtuRFmGGO0OBc4Gn668adTQ</string>
+	<string>enpcrjEGpPjNkCTCdPVXgZymnBSEaUAz</string>
 	<key>BALM_BFF_BASE_URL</key>
 	<string>https://auth.balm.kylescudder.co.uk</string>
 	<key>NSAppTransportSecurity</key>
