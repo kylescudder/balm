@@ -76,8 +76,7 @@ public final class AppEnvironment {
         switch error.code {
         case .cannotConnectToHost, .cannotFindHost, .timedOut, .networkConnectionLost:
             return "Could not reach the Balm backend at \(endpoint). "
-                + "Make sure the Next.js dev server is running (cd jira-clone-ref && bun dev) "
-                + "and that ATLASSIAN_CLIENT_ID + ATLASSIAN_CLIENT_SECRET are set in .env.local."
+                + "Check that the backend is running and reachable over HTTPS."
         case .notConnectedToInternet:
             return "No network connection."
         default:
