@@ -11,14 +11,14 @@ final class FilterDefinitionTests: XCTestCase {
         XCTAssertEqual(FilterDefinition.empty.activeCount, 0)
     }
 
-    func testStructuredActiveCountIsTopLevelChildren() {
-        let inner = FilterGroup(combinator: .any, children: [
-            .condition(cond(.labels, .isAnyOf, ["a"])),
-            .condition(cond(.labels, .isAnyOf, ["b"]))
+    func testStructuredActiveCountIsTopLevelRows() {
+        let inner = FilterGroup(rows: [
+            FilterRow(node: .condition(cond(.labels, .isAnyOf, ["a"]))),
+            FilterRow(connector: .or, node: .condition(cond(.labels, .isAnyOf, ["b"])))
         ])
-        let root = FilterGroup(combinator: .all, children: [
-            .condition(cond(.status, .isAnyOf, ["To Do"])),
-            .group(inner)
+        let root = FilterGroup(rows: [
+            FilterRow(node: .condition(cond(.status, .isAnyOf, ["To Do"]))),
+            FilterRow(connector: .and, node: .group(inner))
         ])
         let def = FilterDefinition.structured(root)
         XCTAssertFalse(def.isEmpty)
@@ -33,13 +33,13 @@ final class FilterDefinitionTests: XCTestCase {
     }
 
     func testNestedCodableRoundTrip() throws {
-        let inner = FilterGroup(combinator: .any, children: [
-            .condition(cond(.dueDate, .isNotEmpty)),
-            .condition(cond(.labels, .isAnyOf, ["jira_escalated"]))
+        let inner = FilterGroup(rows: [
+            FilterRow(node: .condition(cond(.dueDate, .isNotEmpty))),
+            FilterRow(connector: .or, node: .condition(cond(.labels, .isAnyOf, ["jira_escalated"])))
         ])
-        let root = FilterGroup(combinator: .all, children: [
-            .condition(cond(.status, .isAnyOf, ["In Progress"])),
-            .group(inner)
+        let root = FilterGroup(rows: [
+            FilterRow(node: .condition(cond(.status, .isAnyOf, ["In Progress"]))),
+            FilterRow(connector: .and, node: .group(inner))
         ])
         let def = FilterDefinition.structured(root)
 
@@ -68,10 +68,10 @@ final class FilterDefinitionTests: XCTestCase {
             dueDateFrom: "2026-01-01"
         )
         let group = legacy.asFilterGroup
-        XCTAssertEqual(group.combinator, .all)
-        // status, assignee, dueDate(after), reporter — in legacy order
-        XCTAssertEqual(group.children.count, 4)
-        guard case .condition(let first) = group.children[0] else { return XCTFail("expected condition") }
+        // status, assignee, dueDate(after), reporter — in legacy order, all AND.
+        XCTAssertEqual(group.rows.count, 4)
+        XCTAssertTrue(group.rows.allSatisfy { $0.connector == .and })
+        guard case .condition(let first) = group.rows[0].node else { return XCTFail("expected condition") }
         XCTAssertEqual(first.field, .status)
         XCTAssertEqual(first.op, .isAnyOf)
     }

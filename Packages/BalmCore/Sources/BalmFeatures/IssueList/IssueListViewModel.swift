@@ -28,6 +28,17 @@ public final class IssueListViewModel {
     /// extra unfiltered fetch when only the user filters changed.
     private var filterOptionsSprints: Set<String>?
 
+    /// Project-level component/version lists, fetched once and folded into the
+    /// filter pools so those filters offer every project value — not just the
+    /// ones present on loaded issues.
+    private var projectComponentNames: [String] = []
+    private var projectVersions: [JiraVersion] = []
+    private var projectMetadataLoaded = false
+    /// The JQL field that actually holds components for this project — the
+    /// standard `component`, or a tenant custom select like `cf[10312]`,
+    /// resolved from create-metadata. Threaded into the JQL builder.
+    private var componentFieldJQL = "component"
+
     /// Issues grouped into status columns, ordered for the Kanban board.
     /// Columns are bucketed by normalised status name, sorted by
     /// (group rank, statusCategory.key precedence, alphabetical).
@@ -188,11 +199,17 @@ public final class IssueListViewModel {
             loadState = .loaded
             return
         }
+        // A restored component filter needs the resolved JQL field before the
+        // first fetch, or it would query the wrong field and error.
+        if Self.usesComponents(userDefinition) {
+            await loadProjectMetadataIfNeeded()
+        }
         do {
             issues = try await api.issues(
                 projectKey: project.key,
                 sprints: names,
-                definition: userDefinition
+                definition: userDefinition,
+                componentField: componentFieldJQL
             )
             loadState = .loaded
         } catch is CancellationError {
@@ -210,17 +227,82 @@ public final class IssueListViewModel {
     /// scoped to sprints only — but just once per sprint set, not per filter
     /// change.
     private func updateFilterOptions(sprintNames: [String]) async {
+        await loadProjectMetadataIfNeeded()
         let key = Set(sprintNames)
         if userDefinition.isEmpty {
-            filterOptions = AvailableFilterOptions.from(issues)
+            filterOptions = AvailableFilterOptions.from(
+                issues,
+                extraComponents: projectComponentNames,
+                extraReleases: projectVersions
+            )
             filterOptionsSprints = key
             return
         }
         guard filterOptionsSprints != key else { return }
         if let all = try? await api.issues(projectKey: project.key, sprints: sprintNames, definition: .empty) {
-            filterOptions = AvailableFilterOptions.from(all)
+            filterOptions = AvailableFilterOptions.from(
+                all,
+                extraComponents: projectComponentNames,
+                extraReleases: projectVersions
+            )
             filterOptionsSprints = key
         }
+    }
+
+    /// Resolve, once and best-effort, the project's version list (for the
+    /// Release pool) and its component field — both which JQL field holds
+    /// components (standard `component` vs a custom select) and that field's
+    /// full value list, via create-metadata.
+    private func loadProjectMetadataIfNeeded() async {
+        guard !projectMetadataLoaded else { return }
+        let versions = try? await api.send(ProjectEndpoints.Versions(projectKeyOrId: project.key))
+        let component = await resolveComponentField()
+        // Everything threw (e.g. transient network) — leave unmarked so a later
+        // reload retries. Any successful response counts as loaded.
+        guard versions != nil || component != nil else { return }
+        projectVersions = versions ?? []
+        if let component {
+            componentFieldJQL = component.jqlField
+            projectComponentNames = component.values
+        }
+        projectMetadataLoaded = true
+    }
+
+    /// Walk the project's issue types' create-metadata to find the field that
+    /// holds components — the standard `components` field or a tenant custom
+    /// select named "Component(s)". Returns its JQL field name and value list.
+    private func resolveComponentField() async -> (jqlField: String, values: [String])? {
+        guard let types = try? await api.send(MetadataEndpoints.ProjectIssueTypes(projectID: project.id)) else {
+            return nil
+        }
+        for type in types.prefix(5) {
+            guard let id = type.id,
+                  let meta = try? await api.send(
+                    MetadataEndpoints.CreateMetaFields(projectIdOrKey: project.key, issueTypeId: id)
+                  )
+            else { continue }
+            if let resolved = MetadataEndpoints.CreateMetaFields.resolveComponentField(from: meta.fields) {
+                return resolved
+            }
+        }
+        return nil
+    }
+
+    /// Whether a structured definition filters on components (raw JQL is passed
+    /// through untouched, so it never needs the resolved field).
+    private static func usesComponents(_ definition: FilterDefinition) -> Bool {
+        guard case .structured(let group) = definition else { return false }
+        func walk(_ group: FilterGroup) -> Bool {
+            for row in group.rows {
+                switch row.node {
+                case .condition(let c) where c.field == .components: return true
+                case .condition: continue
+                case .group(let sub): if walk(sub) { return true }
+                }
+            }
+            return false
+        }
+        return walk(group)
     }
 
     /// Fetch a single issue by key for the ⌘K go-to-ticket flow — works even

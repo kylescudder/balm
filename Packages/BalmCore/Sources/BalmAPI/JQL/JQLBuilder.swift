@@ -12,17 +12,23 @@ public struct JQLBuilder: Sendable, Equatable {
     public let projectKey: String
     public let sprints: [String]
     public let definition: FilterDefinition
+    /// The JQL field name to use for `FilterField.components`. Defaults to the
+    /// standard `component`, but a tenant whose components live in a custom
+    /// select field passes e.g. `cf[10312]` (resolved from create-metadata).
+    public let componentField: String
     public let orderByCreated: Bool
 
     public init(
         projectKey: String,
         sprints: [String],
         definition: FilterDefinition = .empty,
+        componentField: String = "component",
         orderByCreated: Bool = true
     ) {
         self.projectKey = projectKey
         self.sprints = sprints
         self.definition = definition
+        self.componentField = componentField
         self.orderByCreated = orderByCreated
     }
 
@@ -74,22 +80,44 @@ public struct JQLBuilder: Sendable, Equatable {
 
     // MARK: - Structured compilation
 
-    /// Compile a group to a JQL fragment, or `nil` if it has no usable children.
-    /// A fragment is parenthesised when it has more than one part *and* either it
-    /// is nested, or it is the top-level group with an OR combinator (so it sits
-    /// safely beside the AND-ed project/sprint clauses). A top-level AND group is
-    /// left unwrapped so its clauses merge seamlessly — matching the old builder.
+    /// Compile a group to a JQL fragment, or `nil` if it has no usable rows.
+    ///
+    /// Rows are joined by their per-row connectors. The rows are split into
+    /// AND-runs (a new run starts at each `OR` connector) and the runs are
+    /// OR-joined; JQL's own precedence (AND binds tighter than OR) then yields
+    /// the intended grouping, e.g. `A AND B OR C` == `(A AND B) OR C`.
+    ///
+    /// A top-level all-AND fragment is left unwrapped so it merges with the
+    /// AND-ed project/sprint clauses (and stays byte-identical to the old
+    /// builder); a top-level fragment containing OR is parenthesised. A nested
+    /// fragment is parenthesised whenever it is compound, so it embeds safely.
     private func compile(_ group: FilterGroup, topLevel: Bool) -> String? {
-        let parts = group.children.compactMap { compile($0) }
-        guard !parts.isEmpty else { return nil }
-        let joined = parts.joined(separator: group.combinator.jqlSeparator)
-        if parts.count > 1 && (!topLevel || group.combinator == .any) {
-            return "(\(joined))"
+        var kept: [(connector: FilterConnector, text: String)] = []
+        for row in group.rows {
+            guard let text = compileOperand(row.node) else { continue }
+            kept.append((row.connector, text))
         }
-        return joined
+        guard let first = kept.first else { return nil }
+
+        var runs: [[String]] = [[first.text]]
+        for item in kept.dropFirst() {
+            if item.connector == .and {
+                runs[runs.count - 1].append(item.text)
+            } else {
+                runs.append([item.text])
+            }
+        }
+        let expr = runs.map { $0.joined(separator: " AND ") }.joined(separator: " OR ")
+
+        if topLevel {
+            return runs.count > 1 ? "(\(expr))" : expr
+        }
+        return kept.count > 1 ? "(\(expr))" : expr
     }
 
-    private func compile(_ node: FilterNode) -> String? {
+    /// Compile a node to an operand safe to embed in any AND/OR context — a
+    /// condition clause, or a nested group already parenthesised when compound.
+    private func compileOperand(_ node: FilterNode) -> String? {
         switch node {
         case .group(let g): return compile(g, topLevel: false)
         case .condition(let c): return compile(c)
@@ -97,7 +125,7 @@ public struct JQLBuilder: Sendable, Equatable {
     }
 
     private func compile(_ condition: FilterCondition) -> String? {
-        let field = condition.field.jqlField
+        let field = condition.field == .components ? componentField : condition.field.jqlField
         switch condition.op {
         case .isEmpty:
             return "\(field) is EMPTY"

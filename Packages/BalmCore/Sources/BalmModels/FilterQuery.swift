@@ -115,14 +115,15 @@ public struct FilterCondition: Identifiable, Codable, Sendable, Hashable {
     }
 }
 
-/// How a group's children combine: `all` → AND, `any` → OR.
-public enum Combinator: String, Codable, Sendable, CaseIterable, Identifiable {
-    case all
-    case any
+/// The boolean joiner between two adjacent rows. `and` binds tighter than `or`
+/// (standard JQL precedence), so `A AND B OR C` means `(A AND B) OR C`. Explicit
+/// nested groups override that precedence.
+public enum FilterConnector: String, Codable, Sendable, CaseIterable, Identifiable {
+    case and
+    case or
 
     public var id: String { rawValue }
-    public var displayName: String { self == .all ? "All" : "Any" }
-    public var jqlSeparator: String { self == .all ? " AND " : " OR " }
+    public var label: String { self == .and ? "AND" : "OR" }
 }
 
 /// A node in the filter tree — either a leaf condition or a nested group.
@@ -139,24 +140,32 @@ public indirect enum FilterNode: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// A combinator plus an ordered list of child nodes. The root of a structured
-/// filter is a `FilterGroup`.
+/// One row in a group: a node plus the connector joining it to the *previous*
+/// row. The first row's connector is ignored (nothing precedes it).
+public struct FilterRow: Identifiable, Codable, Sendable, Hashable {
+    public var id: UUID
+    public var connector: FilterConnector
+    public var node: FilterNode
+
+    public init(id: UUID = UUID(), connector: FilterConnector = .and, node: FilterNode) {
+        self.id = id
+        self.connector = connector
+        self.node = node
+    }
+}
+
+/// An ordered list of rows joined by their per-row connectors. The root of a
+/// structured filter is a `FilterGroup`; nested groups set precedence.
 public struct FilterGroup: Identifiable, Codable, Sendable, Hashable {
     public var id: UUID
-    public var combinator: Combinator
-    public var children: [FilterNode]
+    public var rows: [FilterRow]
 
-    public init(
-        id: UUID = UUID(),
-        combinator: Combinator = .all,
-        children: [FilterNode] = []
-    ) {
+    public init(id: UUID = UUID(), rows: [FilterRow] = []) {
         self.id = id
-        self.combinator = combinator
-        self.children = children
+        self.rows = rows
     }
 
-    public var isEmpty: Bool { children.isEmpty }
+    public var isEmpty: Bool { rows.isEmpty }
 }
 
 /// The discretionary filter the user edits: either a structured group tree or a
@@ -166,7 +175,7 @@ public enum FilterDefinition: Codable, Sendable, Hashable {
     case structured(FilterGroup)
     case jql(String)
 
-    public static let empty = FilterDefinition.structured(FilterGroup(combinator: .all, children: []))
+    public static let empty = FilterDefinition.structured(FilterGroup(rows: []))
 
     public var isEmpty: Bool {
         switch self {
@@ -175,11 +184,11 @@ public enum FilterDefinition: Codable, Sendable, Hashable {
         }
     }
 
-    /// Number of active filters for the toolbar badge: top-level child count
-    /// for a structured tree, or 1 for any non-empty raw JQL.
+    /// Number of active filters for the toolbar badge: top-level row count for a
+    /// structured tree, or 1 for any non-empty raw JQL.
     public var activeCount: Int {
         switch self {
-        case .structured(let g): return g.children.count
+        case .structured(let g): return g.rows.count
         case .jql(let s): return s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1
         }
     }
@@ -194,26 +203,29 @@ public extension FilterOptions {
     /// values are preserved verbatim — the compiler still expands them. Reporter
     /// (previously dropped from JQL) is now included and so becomes effective.
     var asFilterGroup: FilterGroup {
-        var children: [FilterNode] = []
+        var rows: [FilterRow] = []
+        func add(_ node: FilterNode) {
+            rows.append(FilterRow(connector: .and, node: node))
+        }
         func add(_ field: FilterField, _ values: [String]) {
             guard !values.isEmpty else { return }
-            children.append(.condition(FilterCondition(field: field, op: .isAnyOf, values: values)))
+            add(.condition(FilterCondition(field: field, op: .isAnyOf, values: values)))
         }
         add(.status, status)
         add(.priority, priority)
         add(.assignee, assignee)
         add(.issueType, issueType)
         if let from = dueDateFrom, !from.isEmpty {
-            children.append(.condition(FilterCondition(field: .dueDate, op: .after, values: [from])))
+            add(.condition(FilterCondition(field: .dueDate, op: .after, values: [from])))
         }
         if let to = dueDateTo, !to.isEmpty {
-            children.append(.condition(FilterCondition(field: .dueDate, op: .before, values: [to])))
+            add(.condition(FilterCondition(field: .dueDate, op: .before, values: [to])))
         }
         add(.labels, labels)
         add(.components, components)
         add(.release, release)
         add(.reporter, reporter)
-        return FilterGroup(combinator: .all, children: children)
+        return FilterGroup(rows: rows)
     }
 
     var asFilterDefinition: FilterDefinition { .structured(asFilterGroup) }

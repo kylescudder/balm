@@ -1,22 +1,30 @@
 import SwiftUI
 import BalmModels
 
-/// Linear-style recursive condition builder. Renders a `FilterGroup` as a
-/// "Match All / Any of the following" block with a row per child condition and
-/// indented sub-blocks per nested group. Edits the bound group in place.
+/// Recursive condition builder. Renders a `FilterGroup` as a list of rows, each
+/// joined to the previous by its own AND/OR connector. Nested groups render as
+/// indented sub-blocks and set precedence. Edits the bound group in place.
 struct FilterBuilderView: View {
     @Binding var group: FilterGroup
     let options: AvailableFilterOptions
     var isRoot: Bool = true
-    var onRemove: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-            ForEach($group.children) { $node in
-                FilterNodeRow(node: $node, options: options, onRemove: remover(for: $node.wrappedValue.id))
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                HStack(alignment: .top, spacing: 8) {
+                    connectorSlot(index: index, connector: $group.rows[index].connector)
+                    nodeView(node: $group.rows[index].node)
+                    Spacer(minLength: 0)
+                    Button(role: .destructive) { remove(row.id) } label: {
+                        Image(systemName: "minus.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Remove")
+                }
             }
-            if group.children.isEmpty {
+            if group.rows.isEmpty {
                 Text("No conditions yet — add one below.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -32,29 +40,34 @@ struct FilterBuilderView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text("Match")
-            Picker("Combinator", selection: $group.combinator) {
-                Text("All").tag(Combinator.all)
-                Text("Any").tag(Combinator.any)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            Text("of the following")
-                .foregroundStyle(.secondary)
-            Spacer()
-            if let onRemove {
-                Button(role: .destructive, action: onRemove) {
-                    Image(systemName: "trash").imageScale(.small)
+    /// Leading column: "Where" before the first row, an AND/OR menu before the
+    /// rest. Fixed width so the rows line up.
+    @ViewBuilder
+    private func connectorSlot(index: Int, connector: Binding<FilterConnector>) -> some View {
+        Group {
+            if index == 0 {
+                Text(isRoot ? "Where" : "")
+                    .foregroundStyle(.secondary)
+            } else {
+                Menu(connector.wrappedValue.label) {
+                    ForEach(FilterConnector.allCases) { option in
+                        Button(option.label) { connector.wrappedValue = option }
+                    }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("Remove group")
+                .fixedSize()
             }
         }
         .font(.callout)
+        .frame(minWidth: 56, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func nodeView(node: Binding<FilterNode>) -> some View {
+        if let condition = node.asCondition {
+            ConditionRow(condition: condition, options: options)
+        } else if let group = node.asGroup {
+            FilterBuilderView(group: group, options: options, isRoot: false)
+        }
     }
 
     private var addButtons: some View {
@@ -66,44 +79,28 @@ struct FilterBuilderView: View {
         .font(.callout)
     }
 
-    private func remover(for id: UUID) -> () -> Void {
-        { group.children.removeAll { $0.id == id } }
+    private func remove(_ id: UUID) {
+        group.rows.removeAll { $0.id == id }
     }
 
     private func addCondition() {
-        let used = Set(group.children.compactMap { node -> FilterField? in
-            if case .condition(let c) = node { return c.field }
+        let used = Set(group.rows.compactMap { row -> FilterField? in
+            if case .condition(let c) = row.node { return c.field }
             return nil
         })
         let field = FilterField.allCases.first { !used.contains($0) } ?? .status
-        group.children.append(.condition(FilterCondition(field: field, op: .isAnyOf)))
+        group.rows.append(FilterRow(node: .condition(FilterCondition(field: field, op: .isAnyOf))))
     }
 
     private func addGroup() {
-        group.children.append(.group(FilterGroup(combinator: .any, children: [])))
+        group.rows.append(FilterRow(node: .group(FilterGroup())))
     }
 }
 
-/// Dispatches a node binding to either a condition row or a nested builder.
-private struct FilterNodeRow: View {
-    @Binding var node: FilterNode
-    let options: AvailableFilterOptions
-    let onRemove: () -> Void
-
-    var body: some View {
-        if let condition = $node.asCondition {
-            ConditionRow(condition: condition, options: options, onRemove: onRemove)
-        } else if let group = $node.asGroup {
-            FilterBuilderView(group: group, options: options, isRoot: false, onRemove: onRemove)
-        }
-    }
-}
-
-/// A single field/operator/value row.
+/// A single field/operator/value row. Removal is owned by the parent row.
 private struct ConditionRow: View {
     @Binding var condition: FilterCondition
     let options: AvailableFilterOptions
-    let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -122,15 +119,6 @@ private struct ConditionRow: View {
             .fixedSize()
 
             valueControl
-
-            Spacer(minLength: 0)
-
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "minus.circle.fill")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Remove condition")
         }
     }
 

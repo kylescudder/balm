@@ -63,9 +63,15 @@ public extension JiraClient {
     func issues(
         projectKey: String,
         sprints: [String],
-        definition: FilterDefinition = .empty
+        definition: FilterDefinition = .empty,
+        componentField: String = "component"
     ) async throws -> [JiraIssue] {
-        let builder = JQLBuilder(projectKey: projectKey, sprints: sprints, definition: definition)
+        let builder = JQLBuilder(
+            projectKey: projectKey,
+            sprints: sprints,
+            definition: definition,
+            componentField: componentField
+        )
         guard let jql = builder.build() else { throw JiraError.missingSprint }
         return try await issues(jql: jql)
     }

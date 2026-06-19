@@ -15,9 +15,13 @@ final class JQLBuilderTests: XCTestCase {
         FilterCondition(field: field, op: op, values: values)
     }
 
-    /// Flat `.all` (or chosen combinator) group of leaf conditions.
-    private func flat(_ conditions: [FilterCondition], _ combinator: Combinator = .all) -> FilterDefinition {
-        .structured(FilterGroup(combinator: combinator, children: conditions.map { .condition($0) }))
+    /// Flat group of leaf conditions joined by `connector` (the first row's
+    /// connector is ignored).
+    private func flat(_ conditions: [FilterCondition], _ connector: FilterConnector = .and) -> FilterDefinition {
+        let rows = conditions.enumerated().map { index, condition in
+            FilterRow(connector: index == 0 ? .and : connector, node: .condition(condition))
+        }
+        return .structured(FilterGroup(rows: rows))
     }
 
     // MARK: - Sprint scoping (unchanged contract)
@@ -113,13 +117,14 @@ final class JQLBuilderTests: XCTestCase {
     // MARK: - OR across fields (the headline feature)
 
     func testNestedOrGroup() {
-        let inner = FilterGroup(combinator: .any, children: [
-            .condition(cond(.dueDate, .isNotEmpty)),
-            .condition(cond(.labels, .isAnyOf, ["jira_escalated"]))
+        // status AND (duedate is not empty OR labels = jira_escalated)
+        let inner = FilterGroup(rows: [
+            FilterRow(node: .condition(cond(.dueDate, .isNotEmpty))),
+            FilterRow(connector: .or, node: .condition(cond(.labels, .isAnyOf, ["jira_escalated"])))
         ])
-        let root = FilterGroup(combinator: .all, children: [
-            .condition(cond(.status, .isAnyOf, ["In Progress"])),
-            .group(inner)
+        let root = FilterGroup(rows: [
+            FilterRow(node: .condition(cond(.status, .isAnyOf, ["In Progress"]))),
+            FilterRow(connector: .and, node: .group(inner))
         ])
         XCTAssertEqual(
             build(sprints: ["Sprint 1"], .structured(root)),
@@ -127,13 +132,46 @@ final class JQLBuilderTests: XCTestCase {
         )
     }
 
-    func testTopLevelAnyWraps() {
+    func testTopLevelOrWraps() {
         XCTAssertEqual(
             build(sprints: ["Sprint 1"], flat([
                 cond(.status, .isAnyOf, ["A"]),
                 cond(.priority, .isAnyOf, ["High"])
-            ], .any)),
+            ], .or)),
             #"project = ABC AND sprint IN ("Sprint 1") AND (status IN ("A") OR priority IN ("High")) order by created"#
+        )
+    }
+
+    func testMixedConnectorsRespectPrecedence() {
+        // A AND B OR C  ==  (A AND B) OR C
+        let rows = [
+            FilterRow(node: .condition(cond(.status, .isAnyOf, ["A"]))),
+            FilterRow(connector: .and, node: .condition(cond(.priority, .isAnyOf, ["High"]))),
+            FilterRow(connector: .or, node: .condition(cond(.labels, .isAnyOf, ["urgent"])))
+        ]
+        XCTAssertEqual(
+            build(sprints: ["Sprint 1"], .structured(FilterGroup(rows: rows))),
+            #"project = ABC AND sprint IN ("Sprint 1") AND (status IN ("A") AND priority IN ("High") OR labels IN ("urgent")) order by created"#
+        )
+    }
+
+    func testComponentFieldOverride() {
+        let jql = JQLBuilder(
+            projectKey: "ABC",
+            sprints: ["Sprint 1"],
+            definition: flat([cond(.components, .isAnyOf, ["Odyssey Web Client"])]),
+            componentField: "cf[10312]"
+        ).build()
+        XCTAssertEqual(
+            jql,
+            #"project = ABC AND sprint IN ("Sprint 1") AND cf[10312] IN ("Odyssey Web Client") order by created"#
+        )
+    }
+
+    func testComponentFieldDefaultsToStandard() {
+        XCTAssertEqual(
+            build(sprints: ["Sprint 1"], flat([cond(.components, .isAnyOf, ["api"])])),
+            #"project = ABC AND sprint IN ("Sprint 1") AND component IN ("api") order by created"#
         )
     }
 

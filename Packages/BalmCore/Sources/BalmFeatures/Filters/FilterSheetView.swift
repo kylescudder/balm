@@ -154,6 +154,10 @@ public struct FilterSheetView: View {
                 Menu("Manage") {
                     ForEach(savedStore.savedFilters) { filter in
                         Menu(filter.name) {
+                            Button("Update to current filter") {
+                                savedStore.save(name: filter.name, definition: draft)
+                            }
+                            .disabled(draft.isEmpty || draft == filter.definition)
                             Button("Rename…") {
                                 renameText = filter.name
                                 renameTarget = filter
