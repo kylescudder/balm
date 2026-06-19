@@ -17,7 +17,7 @@ public final class IssueListViewModel {
     public private(set) var issues: [JiraIssue] = []
     public private(set) var availableSprints: [JiraSprint] = []
     public private(set) var selectedSprintIDs: Set<String> = []
-    public private(set) var userFilters: FilterOptions = .empty
+    public private(set) var userDefinition: FilterDefinition = .empty
     public private(set) var loadState: LoadState = .idle
 
     /// Dropdown pools for the filter sheet. Derived from the issues in the
@@ -143,10 +143,19 @@ public final class IssueListViewModel {
         reload()
     }
 
-    public func setUserFilters(_ filters: FilterOptions) {
-        guard userFilters != filters else { return }
-        userFilters = filters
+    public func setUserDefinition(_ definition: FilterDefinition) {
+        guard userDefinition != definition else { return }
+        userDefinition = definition
         reload()
+    }
+
+    /// The selected sprints resolved to their names — the scope passed to the
+    /// JQL builder. Mirrors the resolution in `performLoad`; used by the filter
+    /// sheet's Advanced-JQL preview.
+    public var selectedSprintNames: [String] {
+        availableSprints
+            .filter { selectedSprintIDs.contains($0.name) || selectedSprintIDs.contains($0.id) }
+            .map(\.name)
     }
 
     public func reload() {
@@ -179,21 +188,12 @@ public final class IssueListViewModel {
             loadState = .loaded
             return
         }
-        let combined = FilterOptions(
-            status: userFilters.status,
-            priority: userFilters.priority,
-            assignee: userFilters.assignee,
-            issueType: userFilters.issueType,
-            labels: userFilters.labels,
-            components: userFilters.components,
-            reporter: userFilters.reporter,
-            sprint: names,
-            release: userFilters.release,
-            dueDateFrom: userFilters.dueDateFrom,
-            dueDateTo: userFilters.dueDateTo
-        )
         do {
-            issues = try await api.issues(projectKey: project.key, filters: combined)
+            issues = try await api.issues(
+                projectKey: project.key,
+                sprints: names,
+                definition: userDefinition
+            )
             loadState = .loaded
         } catch is CancellationError {
             return
@@ -211,14 +211,13 @@ public final class IssueListViewModel {
     /// change.
     private func updateFilterOptions(sprintNames: [String]) async {
         let key = Set(sprintNames)
-        if userFilters.isEmpty {
+        if userDefinition.isEmpty {
             filterOptions = AvailableFilterOptions.from(issues)
             filterOptionsSprints = key
             return
         }
         guard filterOptionsSprints != key else { return }
-        let sprintOnly = FilterOptions(sprint: sprintNames)
-        if let all = try? await api.issues(projectKey: project.key, filters: sprintOnly) {
+        if let all = try? await api.issues(projectKey: project.key, sprints: sprintNames, definition: .empty) {
             filterOptions = AvailableFilterOptions.from(all)
             filterOptionsSprints = key
         }

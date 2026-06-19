@@ -1,107 +1,94 @@
 import SwiftUI
 import BalmModels
+import BalmAPI
 
 /// Modal filter editor presented as a sheet on every platform. Edits a draft
-/// copy of `FilterStore.filters` so the user can Cancel without side-effects.
-/// Apply commits the draft back to the store; Reset wipes the draft only.
+/// `FilterDefinition` — a structured condition tree (the builder) or a raw-JQL
+/// fragment (Advanced) — so the user can Cancel without side-effects. Apply
+/// commits the draft to the store; Reset clears the draft only. Saved filters
+/// are applied into / created from the draft.
 public struct FilterSheetView: View {
     @Bindable var store: FilterStore
+    @Bindable var savedStore: SavedFiltersStore
     let options: AvailableFilterOptions
+    let sprints: [String]
     let onDismiss: () -> Void
 
-    @State private var draft: FilterOptions
+    enum EditMode: String, CaseIterable, Identifiable {
+        case structured, jql
+        var id: String { rawValue }
+        var label: String { self == .structured ? "Builder" : "Advanced (JQL)" }
+    }
+
+    @State private var mode: EditMode
+    @State private var rootGroup: FilterGroup
+    @State private var jqlText: String
+
+    @State private var showingSaveAlert = false
+    @State private var saveName = ""
+    @State private var renameTarget: SavedFilter?
+    @State private var renameText = ""
 
     public init(
         store: FilterStore,
+        savedStore: SavedFiltersStore,
         options: AvailableFilterOptions,
+        sprints: [String],
         onDismiss: @escaping () -> Void
     ) {
         self.store = store
+        self.savedStore = savedStore
         self.options = options
+        self.sprints = sprints
         self.onDismiss = onDismiss
-        _draft = State(initialValue: store.filters)
+        switch store.definition {
+        case .structured(let group):
+            _mode = State(initialValue: .structured)
+            _rootGroup = State(initialValue: group)
+            _jqlText = State(initialValue: "")
+        case .jql(let raw):
+            _mode = State(initialValue: .jql)
+            _rootGroup = State(initialValue: FilterGroup())
+            _jqlText = State(initialValue: raw)
+        }
+    }
+
+    private var draft: FilterDefinition {
+        switch mode {
+        case .structured: return .structured(rootGroup)
+        case .jql: return .jql(jqlText)
+        }
     }
 
     public var body: some View {
         NavigationStack {
-            Form {
-                Section("Status") {
-                    KeyboardSelectMenu(
-                        title: "Status",
-                        options: statusOptions(options.statuses),
-                        selection: $draft.status,
-                        shortcut: "s"
-                    )
-                }
-                Section("Priority") {
-                    KeyboardSelectMenu(
-                        title: "Priority",
-                        options: stringOptions(options.priorities),
-                        selection: $draft.priority,
-                        shortcut: "p"
-                    )
-                }
-                Section("People") {
-                    KeyboardSelectMenu(
-                        title: "Assignee",
-                        options: namedOptions(options.assignees),
-                        selection: $draft.assignee,
-                        shortcut: "a"
-                    )
-                    KeyboardSelectMenu(
-                        title: "Reporter",
-                        options: namedOptions(options.reporters),
-                        selection: $draft.reporter
-                    )
-                }
-                Section("Type & Release") {
-                    KeyboardSelectMenu(
-                        title: "Type",
-                        options: stringOptions(options.issueTypes),
-                        selection: $draft.issueType,
-                        shortcut: "t"
-                    )
-                    KeyboardSelectMenu(
-                        title: "Release",
-                        options: namedOptions(options.releases),
-                        selection: $draft.release
-                    )
-                }
-                Section("Tags") {
-                    KeyboardSelectMenu(
-                        title: "Labels",
-                        options: stringOptions(options.labels),
-                        selection: $draft.labels,
-                        shortcut: "l"
-                    )
-                    KeyboardSelectMenu(
-                        title: "Components",
-                        options: stringOptions(options.components),
-                        selection: $draft.components,
-                        shortcut: "c"
-                    )
-                }
-                Section("Due Date") {
-                    DueDateRangeRow(
-                        from: $draft.dueDateFrom,
-                        to: $draft.dueDateTo
-                    )
-                }
-                if draft.activeCount > 0 {
-                    Section {
-                        Button(role: .destructive) {
-                            draft = .empty
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Text("Reset")
-                                Spacer()
-                            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Picker("Mode", selection: $mode) {
+                            ForEach(EditMode.allCases) { Text($0.label).tag($0) }
                         }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Spacer()
+                        savedMenu
+                    }
+
+                    if mode == .structured {
+                        FilterBuilderView(group: $rootGroup, options: options)
+                    } else {
+                        AdvancedJQLView(jql: $jqlText, projectKey: store.projectKey, sprints: sprints)
+                    }
+
+                    if !draft.isEmpty {
+                        Button(role: .destructive) { reset() } label: {
+                            Label("Reset", systemImage: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(.borderless)
                     }
                 }
+                .padding()
             }
-            .formStyle(.grouped)
             .navigationTitle("Filter")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -112,85 +99,97 @@ public struct FilterSheetView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Apply") {
-                        store.filters = draft
+                        store.definition = draft
                         onDismiss()
                     }
-                    .disabled(draft == store.filters)
+                    .disabled(draft == store.definition)
                 }
             }
         }
-        .frame(minWidth: 480, minHeight: 520)
-    }
-
-    private func stringOptions(_ values: [String]) -> [MultiSelectOption] {
-        values.map { MultiSelectOption(id: $0, label: $0) }
-    }
-
-    /// Like `stringOptions` but pipes labels through `StatusNormaliser` so the
-    /// menu reads "Awaiting Testing" instead of "AWAITING TESTING". The `id`
-    /// stays as the raw tenant value so JQL still matches.
-    private func statusOptions(_ values: [String]) -> [MultiSelectOption] {
-        values
-            .map { MultiSelectOption(id: $0, label: StatusNormaliser.normalise($0)) }
-            .sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
-    }
-
-    private func namedOptions(_ values: [AvailableFilterOptions.NamedOption]) -> [MultiSelectOption] {
-        values.map { MultiSelectOption(id: $0.id, label: $0.displayName) }
-    }
-}
-
-// MARK: - Due date range row
-
-/// Two-row date range editor. Each side has a Toggle that reveals a
-/// `DatePicker` when enabled. Persists as ISO `yyyy-MM-dd` strings.
-struct DueDateRangeRow: View {
-    @Binding var from: String?
-    @Binding var to: String?
-
-    @State private var fromDate: Date = .now
-    @State private var toDate: Date = .now
-    @State private var hasFrom: Bool = false
-    @State private var hasTo: Bool = false
-
-    init(from: Binding<String?>, to: Binding<String?>) {
-        self._from = from
-        self._to = to
-        let parser = DateFormatter()
-        parser.dateFormat = "yyyy-MM-dd"
-        if let raw = from.wrappedValue, let date = parser.date(from: raw) {
-            _fromDate = State(initialValue: date)
-            _hasFrom = State(initialValue: true)
-        }
-        if let raw = to.wrappedValue, let date = parser.date(from: raw) {
-            _toDate = State(initialValue: date)
-            _hasTo = State(initialValue: true)
-        }
-    }
-
-    var body: some View {
-        Group {
-            Toggle("From", isOn: $hasFrom)
-            if hasFrom {
-                DatePicker("From date", selection: $fromDate, displayedComponents: .date)
-                    .labelsHidden()
-            }
-            Toggle("To", isOn: $hasTo)
-            if hasTo {
-                DatePicker("To date", selection: $toDate, displayedComponents: .date)
-                    .labelsHidden()
+        .frame(minWidth: 560, minHeight: 580)
+        .onChange(of: mode) { _, newMode in
+            // First switch to Advanced prefills the editor from the builder so
+            // the user can tweak the compiled JQL. Switching back keeps the
+            // builder tree (arbitrary JQL can't be parsed back into it).
+            if newMode == .jql,
+               jqlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !rootGroup.isEmpty {
+                jqlText = JQLBuilder(
+                    projectKey: store.projectKey,
+                    sprints: [],
+                    definition: .structured(rootGroup)
+                ).discretionaryFragment() ?? ""
             }
         }
-        .onChange(of: hasFrom) { _, _ in apply() }
-        .onChange(of: hasTo) { _, _ in apply() }
-        .onChange(of: fromDate) { _, _ in apply() }
-        .onChange(of: toDate) { _, _ in apply() }
+        .alert("Save Filter", isPresented: $showingSaveAlert) {
+            TextField("Name", text: $saveName)
+            Button("Save") { savedStore.save(name: saveName, definition: draft) }
+                .disabled(saveName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Save the current filter to reuse later in this project.")
+        }
+        .alert("Rename Filter", isPresented: renameAlertBinding) {
+            TextField("Name", text: $renameText)
+            Button("Rename") {
+                if let target = renameTarget { savedStore.rename(target, to: renameText) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
-    private func apply() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        from = hasFrom ? formatter.string(from: fromDate) : nil
-        to = hasTo ? formatter.string(from: toDate) : nil
+    private var renameAlertBinding: Binding<Bool> {
+        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
+    }
+
+    private var savedMenu: some View {
+        Menu {
+            if savedStore.savedFilters.isEmpty {
+                Text("No saved filters")
+            } else {
+                ForEach(savedStore.savedFilters) { filter in
+                    Button(filter.name) { apply(filter) }
+                }
+                Divider()
+                Menu("Manage") {
+                    ForEach(savedStore.savedFilters) { filter in
+                        Menu(filter.name) {
+                            Button("Rename…") {
+                                renameText = filter.name
+                                renameTarget = filter
+                            }
+                            Button("Delete", role: .destructive) { savedStore.delete(filter) }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("Save current as…") {
+                saveName = ""
+                showingSaveAlert = true
+            }
+            .disabled(draft.isEmpty)
+        } label: {
+            Label("Saved", systemImage: "bookmark")
+        }
+        .fixedSize()
+    }
+
+    private func apply(_ filter: SavedFilter) {
+        switch filter.definition {
+        case .structured(let group):
+            rootGroup = group
+            jqlText = ""
+            mode = .structured
+        case .jql(let raw):
+            jqlText = raw
+            mode = .jql
+        }
+    }
+
+    private func reset() {
+        rootGroup = FilterGroup()
+        jqlText = ""
+        mode = .structured
     }
 }

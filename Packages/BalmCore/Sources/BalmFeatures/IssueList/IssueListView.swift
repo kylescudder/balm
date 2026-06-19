@@ -19,6 +19,7 @@ public struct IssueListView: View {
     @Binding private var selection: JiraIssue?
     @State private var model: IssueListViewModel
     @State private var filterStore: FilterStore
+    @State private var savedFiltersStore: SavedFiltersStore
     @State private var showingSprintPicker = false
     @State private var showingNewIssue = false
     @State private var showingFiltersSheet = false
@@ -31,6 +32,7 @@ public struct IssueListView: View {
         let placeholderAPI = BalmAPI_PlaceholderForState.shared
         self._model = State(initialValue: IssueListViewModel(project: project, api: placeholderAPI.api))
         self._filterStore = State(initialValue: FilterStore(projectKey: project.key))
+        self._savedFiltersStore = State(initialValue: SavedFiltersStore(projectKey: project.key))
         self._viewModeRaw = AppStorage(
             wrappedValue: IssueViewMode.list.rawValue,
             "issues.viewMode.\(project.key)"
@@ -68,7 +70,9 @@ public struct IssueListView: View {
         .sheet(isPresented: $showingFiltersSheet) {
             FilterSheetView(
                 store: filterStore,
+                savedStore: savedFiltersStore,
                 options: model.filterOptions,
+                sprints: model.selectedSprintNames,
                 onDismiss: { showingFiltersSheet = false }
             )
         }
@@ -119,7 +123,9 @@ public struct IssueListView: View {
             .sheet(isPresented: $showingFiltersSheet) {
                 FilterSheetView(
                     store: filterStore,
+                    savedStore: savedFiltersStore,
                     options: model.filterOptions,
+                    sprints: model.selectedSprintNames,
                     onDismiss: { showingFiltersSheet = false }
                 )
                 .presentationDetents([.large])
@@ -205,7 +211,7 @@ public struct IssueListView: View {
                         Label("Sprints (\(model.selectedSprintIDs.count))", systemImage: "calendar")
                     }
                     Button(action: toggleFilters) {
-                        let count = filterStore.filters.activeCount
+                        let count = filterStore.definition.activeCount
                         Label(count > 0 ? "Filters (\(count))" : "Filters",
                               systemImage: "line.3.horizontal.decrease.circle")
                     }
@@ -245,7 +251,7 @@ public struct IssueListView: View {
         }
         ToolbarItem {
             Button(action: toggleFilters) {
-                let count = filterStore.filters.activeCount
+                let count = filterStore.definition.activeCount
                 Label(
                     "Filters",
                     systemImage: count > 0
@@ -255,8 +261,8 @@ public struct IssueListView: View {
                 .labelStyle(.iconOnly)
             }
             .keyboardShortcut("f", modifiers: [])
-            .help(filterStore.filters.activeCount > 0
-                  ? "Filters (\(filterStore.filters.activeCount) active)"
+            .help(filterStore.definition.activeCount > 0
+                  ? "Filters (\(filterStore.definition.activeCount) active)"
                   : "Filters")
         }
         ToolbarItem {
@@ -361,7 +367,7 @@ public struct IssueListView: View {
     private func reconnectAndLoad() async {
         BalmAPI_PlaceholderForState.shared.api = env.api
         let real = IssueListViewModel(project: model.project, api: env.api, toaster: env.toaster)
-        real.setUserFilters(filterStore.filters)
+        real.setUserDefinition(filterStore.definition)
         model = real
         await real.loadSprintsIfNeeded()
         real.reload()
@@ -387,7 +393,7 @@ public struct IssueListView: View {
                     .multilineTextAlignment(.center)
                 Button("Pick Sprints") { showingSprintPicker = true }
                     .buttonStyle(.borderedProminent)
-            } else if !model.userFilters.isEmpty {
+            } else if !model.userDefinition.isEmpty {
                 Text("No matches.")
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.palette.foreground)
@@ -442,8 +448,8 @@ private extension View {
             .task(id: taskID) {
                 await reconnect()
             }
-            .onChange(of: filterStore.filters) { _, next in
-                model.setUserFilters(next)
+            .onChange(of: filterStore.definition) { _, next in
+                model.setUserDefinition(next)
             }
     }
 }
