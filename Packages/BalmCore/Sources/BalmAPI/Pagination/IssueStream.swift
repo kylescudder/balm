@@ -57,10 +57,21 @@ public extension JiraClient {
         return all
     }
 
-    /// Convenience builder: build JQL from a project + FilterOptions and stream issues.
-    /// Throws `JiraError.missingSprint` if the sprint filter is empty (mirrors the web).
-    func issues(projectKey: String, filters: FilterOptions) async throws -> [JiraIssue] {
-        let builder = JQLBuilder(projectKey: projectKey, filters: filters)
+    /// Convenience builder: compile JQL from a project + selected sprints + a
+    /// `FilterDefinition` (structured tree or raw JQL) and stream issues.
+    /// Throws `JiraError.missingSprint` if no sprint is selected (mirrors the web).
+    func issues(
+        projectKey: String,
+        sprints: [String],
+        definition: FilterDefinition = .empty,
+        componentField: String = "component"
+    ) async throws -> [JiraIssue] {
+        let builder = JQLBuilder(
+            projectKey: projectKey,
+            sprints: sprints,
+            definition: definition,
+            componentField: componentField
+        )
         guard let jql = builder.build() else { throw JiraError.missingSprint }
         return try await issues(jql: jql)
     }

@@ -47,7 +47,15 @@ public struct AvailableFilterOptions: Sendable, Equatable {
 
     /// Derive the dropdown pools from the currently loaded issues.
     /// Adds the `UNASSIGNED` and `NO_RELEASE` sentinels so they always appear.
-    public static func from(_ issues: [JiraIssue]) -> AvailableFilterOptions {
+    ///
+    /// `extraComponents` / `extraReleases` fold in the project's full component
+    /// and version lists (fetched separately), so those filters offer every
+    /// project value — not just the ones that happen to appear on loaded issues.
+    public static func from(
+        _ issues: [JiraIssue],
+        extraComponents: [String] = [],
+        extraReleases: [JiraVersion] = []
+    ) -> AvailableFilterOptions {
         let statuses = Self.unique(issues.map(\.status.name))
         let priorities = Self.unique(issues.map(\.priority.name))
         let issueTypes = Self.unique(issues.map(\.issueType.name))
@@ -75,16 +83,15 @@ public struct AvailableFilterOptions: Sendable, Equatable {
         }
 
         let labels = Self.unique(issues.flatMap(\.labels))
-        let components = Self.unique(issues.flatMap { $0.components.map(\.name) })
+        let components = Self.unique(issues.flatMap { $0.components.map(\.name) } + extraComponents)
 
         var releases: [NamedOption] = [
             NamedOption(id: JiraVersion.noReleaseSentinel, displayName: "No release")
         ]
         var seenRelease = Set<String>()
-        for issue in issues {
-            for v in issue.fixVersions where seenRelease.insert(v.name).inserted {
-                releases.append(NamedOption(id: v.name, displayName: v.name))
-            }
+        let releaseNames = issues.flatMap { $0.fixVersions.map(\.name) } + extraReleases.map(\.name)
+        for name in releaseNames where seenRelease.insert(name).inserted {
+            releases.append(NamedOption(id: name, displayName: name))
         }
 
         return AvailableFilterOptions(

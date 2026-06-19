@@ -20,7 +20,30 @@ struct MultiSelectOption: Identifiable, Hashable {
 ///   • Esc / click-away dismiss (popover default)
 ///
 /// Drop-in shape: same API as a labelled form row, so it slots into a `Form`.
+/// Wraps the standalone `KeyboardMultiSelect` button in a `LabeledContent`.
 struct KeyboardSelectMenu: View {
+    let title: String
+    let options: [MultiSelectOption]
+    @Binding var selection: [String]
+    /// First-letter hotkey that opens this menu while the parent view is up.
+    var shortcut: KeyEquivalent? = nil
+
+    var body: some View {
+        LabeledContent(title) {
+            KeyboardMultiSelect(
+                title: title,
+                options: options,
+                selection: $selection,
+                shortcut: shortcut
+            )
+        }
+    }
+}
+
+/// The label-less popover multi-select button. Same keyboard behaviour as
+/// `KeyboardSelectMenu` but without the `LabeledContent` wrapper, so it can sit
+/// inline in a condition row (where the field name is already shown).
+struct KeyboardMultiSelect: View {
     let title: String
     let options: [MultiSelectOption]
     @Binding var selection: [String]
@@ -34,21 +57,19 @@ struct KeyboardSelectMenu: View {
     @FocusState private var listFocused: Bool
 
     var body: some View {
-        LabeledContent(title) {
-            Button { isPresented = true } label: {
-                HStack(spacing: 4) {
-                    Text(summary)
-                        .foregroundStyle(selection.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-                    Image(systemName: "chevron.up.chevron.down")
-                        .imageScale(.small)
-                        .foregroundStyle(.tint)
-                }
+        Button { isPresented = true } label: {
+            HStack(spacing: 4) {
+                Text(summary)
+                    .foregroundStyle(selection.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                Image(systemName: "chevron.up.chevron.down")
+                    .imageScale(.small)
+                    .foregroundStyle(.tint)
             }
-            .buttonStyle(.plain)
-            .fixedSize()
-            .keyboardShortcutIfPresent(shortcut)
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) { popoverBody }
         }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .keyboardShortcutIfPresent(shortcut)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) { popoverBody }
     }
 
     private var popoverBody: some View {
