@@ -78,19 +78,39 @@ struct IssueLinkListView: View {
 
 private struct LinkRow: View {
     @Environment(\.balmTheme) private var theme
+    @Environment(\.openIssue) private var openIssue
     let link: JiraIssueLink
     let onDelete: () -> Void
 
+    @State private var isHovering = false
+
     var body: some View {
         HStack(spacing: theme.spacing.s) {
-            Text(link.issue.key)
-                .font(theme.typography.caption.monospaced())
-                .foregroundStyle(theme.palette.mutedForeground)
-            Text(link.issue.summary)
-                .font(theme.typography.body)
-                .foregroundStyle(theme.palette.foreground)
-                .lineLimit(1)
-            Spacer()
+            Button {
+                guard !isOptimistic else { return }
+                openIssue(link.issue.asJiraIssue())
+            } label: {
+                HStack(spacing: theme.spacing.s) {
+                    Text(link.issue.key)
+                        .font(theme.typography.caption.monospaced())
+                        .foregroundStyle(theme.palette.mutedForeground)
+                    Text(link.issue.summary)
+                        .font(theme.typography.body)
+                        .foregroundStyle(isHovering ? theme.palette.primary : theme.palette.foreground)
+                        .underline(isHovering)
+                        .lineLimit(1)
+                    Spacer(minLength: theme.spacing.s)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isOptimistic)
+            #if os(macOS)
+            .onHover { isHovering = $0 }
+            .animation(.easeInOut(duration: 0.12), value: isHovering)
+            .help("Open \(link.issue.key)")
+            #endif
+
             if let status = link.issue.status?.name {
                 StatusChip(status: status)
             }
@@ -115,4 +135,23 @@ private struct LinkRow: View {
     }
 
     private var isOptimistic: Bool { link.id.hasPrefix("tmp-link-") }
+}
+
+private extension JiraIssueLink.LinkedIssue {
+    /// Bridge a linked-issue summary into a full `JiraIssue` for navigation.
+    /// Non-optional fields fall back to placeholders; the detail view reloads
+    /// from the key, so these are only the seed shown for the first frame.
+    func asJiraIssue() -> JiraIssue {
+        JiraIssue(
+            id: key,
+            key: key,
+            summary: summary,
+            status: status ?? JiraStatus(
+                name: "",
+                statusCategory: JiraStatusCategory(key: "new", colorName: "blue")
+            ),
+            priority: priority ?? JiraPriority(name: ""),
+            issueType: issueType ?? JiraIssueType(name: "")
+        )
+    }
 }

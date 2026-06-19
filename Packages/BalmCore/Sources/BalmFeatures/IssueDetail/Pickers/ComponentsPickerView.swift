@@ -29,32 +29,29 @@ struct ComponentsPickerView: View {
             confirmTitle: "Apply",
             onConfirm: { onApply(Array(draft).sorted()) }
         ) {
-            List {
-                if isLoading && available.isEmpty {
-                    HStack { ProgressView(); Text("Loading…") }
-                } else if available.isEmpty {
-                    Text("No components defined for this project.")
-                        .foregroundStyle(theme.palette.mutedForeground)
-                } else {
-                    ForEach(available) { component in
-                        toggleRow(name: component.name)
+            KeyboardFilterList(
+                items: available,
+                prompt: "Filter components",
+                isLoading: isLoading,
+                emptyText: "No components defined for this project.",
+                filterText: { $0.name },
+                onActivate: { toggle($0.name) }
+            ) { component in
+                HStack {
+                    Text(component.name).foregroundStyle(theme.palette.foreground)
+                    Spacer()
+                    if draft.contains(component.name) {
+                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
                     }
                 }
+                .contentShape(Rectangle())
             }
             .task { await load() }
         }
     }
 
-    @ViewBuilder
-    private func toggleRow(name: String) -> some View {
-        Toggle(isOn: Binding(
-            get: { draft.contains(name) },
-            set: { on in
-                if on { draft.insert(name) } else { draft.remove(name) }
-            }
-        )) {
-            Text(name).foregroundStyle(theme.palette.foreground)
-        }
+    private func toggle(_ name: String) {
+        if draft.contains(name) { draft.remove(name) } else { draft.insert(name) }
     }
 
     private func load() async {

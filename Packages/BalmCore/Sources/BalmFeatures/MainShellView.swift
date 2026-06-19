@@ -72,6 +72,7 @@ public struct MainShellView: View {
                     IssueDetailView(issue: issue)
                 }
         }
+        .environment(\.openIssue, OpenIssueAction { navPath.append($0) })
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environment(env)

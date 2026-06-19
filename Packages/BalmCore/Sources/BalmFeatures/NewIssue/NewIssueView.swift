@@ -48,6 +48,7 @@ public struct NewIssueView: View {
                 Section("Summary") {
                     TextField("Summary", text: $summary, axis: .vertical)
                         .lineLimit(1...3)
+                        .labelsHidden()
                 }
 
                 Section("Type") {
@@ -58,7 +59,7 @@ public struct NewIssueView: View {
 
                 Section("Description") {
                     TextEditor(text: $descriptionText)
-                        .frame(minHeight: 120)
+                        .frame(minHeight: 120, maxHeight: 200)
                 }
 
                 Section("Assignment") {
@@ -88,6 +89,7 @@ public struct NewIssueView: View {
                     }
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("New Issue in \(project.key)")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -280,29 +282,29 @@ struct IssueTypePickerView: View {
 
     var body: some View {
         PickerScaffold(title: "Issue Type") {
-            List {
-                ForEach(available) { type in
-                    Button {
-                        onSelect(type); dismiss()
-                    } label: {
-                        HStack(spacing: theme.spacing.s) {
-                            if let icon = type.iconUrl {
-                                AsyncImage(url: icon) { phase in
-                                    if case .success(let img) = phase {
-                                        img.resizable().scaledToFit()
-                                    } else { Color.clear }
-                                }
-                                .frame(width: 18, height: 18)
-                            }
-                            Text(type.name).foregroundStyle(theme.palette.foreground)
-                            Spacer()
-                            if type.id == currentID {
-                                Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
-                            }
+            KeyboardFilterList(
+                items: available,
+                prompt: "Filter types",
+                initialSelection: available.first { $0.id == currentID },
+                filterText: { $0.name },
+                onActivate: { onSelect($0); dismiss() }
+            ) { type in
+                HStack(spacing: theme.spacing.s) {
+                    if let icon = type.iconUrl {
+                        AsyncImage(url: icon) { phase in
+                            if case .success(let img) = phase {
+                                img.resizable().scaledToFit()
+                            } else { Color.clear }
                         }
+                        .frame(width: 18, height: 18)
                     }
-                    .buttonStyle(.plain)
+                    Text(type.name).foregroundStyle(theme.palette.foreground)
+                    Spacer()
+                    if type.id == currentID {
+                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
+                    }
                 }
+                .contentShape(Rectangle())
             }
         }
     }

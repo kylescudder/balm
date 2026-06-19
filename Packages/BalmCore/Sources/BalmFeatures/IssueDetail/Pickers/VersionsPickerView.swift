@@ -29,37 +29,35 @@ struct VersionsPickerView: View {
             confirmTitle: "Apply",
             onConfirm: { onApply(available.filter { draftIDs.contains($0.id) }) }
         ) {
-            List {
-                if isLoading && available.isEmpty {
-                    HStack { ProgressView(); Text("Loading…") }
-                } else if available.isEmpty {
-                    Text("No releases defined for this project.")
-                        .foregroundStyle(theme.palette.mutedForeground)
-                } else {
-                    ForEach(available) { version in
-                        Toggle(isOn: Binding(
-                            get: { draftIDs.contains(version.id) },
-                            set: { on in
-                                if on { draftIDs.insert(version.id) }
-                                else { draftIDs.remove(version.id) }
-                            }
-                        )) {
-                            HStack {
-                                Text(version.name).foregroundStyle(theme.palette.foreground)
-                                Spacer()
-                                if version.released {
-                                    BalmChip("Released", tint: theme.palette.color(for: .chart5))
-                                }
-                                if version.archived {
-                                    BalmChip("Archived", tint: theme.palette.mutedForeground)
-                                }
-                            }
-                        }
+            KeyboardFilterList(
+                items: available,
+                prompt: "Filter versions",
+                isLoading: isLoading,
+                emptyText: "No releases defined for this project.",
+                filterText: { $0.name },
+                onActivate: { toggle($0.id) }
+            ) { version in
+                HStack {
+                    Text(version.name).foregroundStyle(theme.palette.foreground)
+                    Spacer()
+                    if version.released {
+                        BalmChip("Released", tint: theme.palette.color(for: .chart5))
+                    }
+                    if version.archived {
+                        BalmChip("Archived", tint: theme.palette.mutedForeground)
+                    }
+                    if draftIDs.contains(version.id) {
+                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
                     }
                 }
+                .contentShape(Rectangle())
             }
             .task { await load() }
         }
+    }
+
+    private func toggle(_ id: String) {
+        if draftIDs.contains(id) { draftIDs.remove(id) } else { draftIDs.insert(id) }
     }
 
     private func load() async {
