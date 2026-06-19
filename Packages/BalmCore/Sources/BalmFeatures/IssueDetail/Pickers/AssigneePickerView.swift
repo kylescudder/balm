@@ -14,75 +14,90 @@ struct AssigneePickerView: View {
 
     @State private var users: [JiraUser] = []
     @State private var isLoading = false
-    @State private var query = ""
+
+    /// Folds the synthetic "Unassigned" choice into the same keyboard-navigable
+    /// list as the real users.
+    private enum Entry: Hashable {
+        case unassigned
+        case user(JiraUser)
+    }
+
+    private var entries: [Entry] {
+        [.unassigned] + users.map(Entry.user)
+    }
+
+    private var currentEntry: Entry {
+        guard let id = currentAccountID,
+              let match = users.first(where: { $0.accountId == id }) else { return .unassigned }
+        return .user(match)
+    }
 
     var body: some View {
         PickerScaffold(title: "Assignee") {
-            List {
-                Section {
-                    row(name: "Unassigned", icon: "person.slash") {
-                        onSelect(nil); dismiss()
-                    }
-                }
-                Section("People") {
-                    if isLoading && users.isEmpty {
-                        HStack { ProgressView(); Text("Loading…") }
-                    } else {
-                        ForEach(filtered) { user in
-                            Button {
-                                onSelect(user); dismiss()
-                            } label: {
-                                HStack(spacing: theme.spacing.s) {
-                                    AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 28)
-                                    VStack(alignment: .leading) {
-                                        Text(user.displayName)
-                                            .foregroundStyle(theme.palette.foreground)
-                                        if let email = user.emailAddress {
-                                            Text(email)
-                                                .font(theme.typography.caption)
-                                                .foregroundStyle(theme.palette.mutedForeground)
-                                        }
-                                    }
-                                    Spacer()
-                                    if user.accountId == currentAccountID {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(theme.palette.primary)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+            KeyboardFilterList(
+                items: entries,
+                prompt: "Filter people",
+                isLoading: isLoading,
+                initialSelection: currentEntry,
+                filterText: filterText,
+                onActivate: activate
+            ) { entry in
+                row(entry)
             }
-            .searchable(text: $query, prompt: "Search people")
             .task { await load() }
         }
     }
 
-    private var filtered: [JiraUser] {
-        guard !query.isEmpty else { return users }
-        let q = query.lowercased()
-        return users.filter {
-            $0.displayName.lowercased().contains(q) ||
-            ($0.emailAddress?.lowercased().contains(q) ?? false)
+    private func filterText(_ entry: Entry) -> String {
+        switch entry {
+        case .unassigned: return "Unassigned"
+        case .user(let user): return "\(user.displayName) \(user.emailAddress ?? "")"
         }
     }
 
-    private func row(name: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func activate(_ entry: Entry) {
+        switch entry {
+        case .unassigned: onSelect(nil)
+        case .user(let user): onSelect(user)
+        }
+        dismiss()
+    }
+
+    @ViewBuilder
+    private func row(_ entry: Entry) -> some View {
+        switch entry {
+        case .unassigned:
             HStack {
-                Image(systemName: icon)
+                Image(systemName: "person.slash")
                     .frame(width: 28)
                     .foregroundStyle(theme.palette.mutedForeground)
-                Text(name).foregroundStyle(theme.palette.foreground)
+                Text("Unassigned").foregroundStyle(theme.palette.foreground)
                 Spacer()
                 if currentAccountID == nil {
                     Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
                 }
             }
+            .contentShape(Rectangle())
+        case .user(let user):
+            HStack(spacing: theme.spacing.s) {
+                AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 28)
+                VStack(alignment: .leading) {
+                    Text(user.displayName)
+                        .foregroundStyle(theme.palette.foreground)
+                    if let email = user.emailAddress {
+                        Text(email)
+                            .font(theme.typography.caption)
+                            .foregroundStyle(theme.palette.mutedForeground)
+                    }
+                }
+                Spacer()
+                if user.accountId == currentAccountID {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(theme.palette.primary)
+                }
+            }
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
     }
 
     private func load() async {

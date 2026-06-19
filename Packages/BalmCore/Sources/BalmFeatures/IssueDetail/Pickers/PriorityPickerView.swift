@@ -16,33 +16,30 @@ struct PriorityPickerView: View {
 
     var body: some View {
         PickerScaffold(title: "Priority") {
-            List {
-                if isLoading && priorities.isEmpty {
-                    HStack { ProgressView(); Text("Loading…") }
-                } else {
-                    ForEach(priorities, id: \.name) { priority in
-                        Button {
-                            onSelect(priority); dismiss()
-                        } label: {
-                            HStack(spacing: theme.spacing.s) {
-                                if let icon = priority.iconUrl {
-                                    AsyncImage(url: icon) { phase in
-                                        if case .success(let img) = phase {
-                                            img.resizable().scaledToFit()
-                                        } else { Color.clear }
-                                    }
-                                    .frame(width: 18, height: 18)
-                                }
-                                Text(priority.name).foregroundStyle(theme.palette.foreground)
-                                Spacer()
-                                if priority.name == currentName {
-                                    Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
-                                }
-                            }
+            KeyboardFilterList(
+                items: priorities,
+                prompt: "Filter priorities",
+                isLoading: isLoading,
+                initialSelection: priorities.first { $0.name == currentName },
+                filterText: { $0.name },
+                onActivate: { onSelect($0); dismiss() }
+            ) { priority in
+                HStack(spacing: theme.spacing.s) {
+                    if let icon = priority.iconUrl {
+                        AsyncImage(url: icon) { phase in
+                            if case .success(let img) = phase {
+                                img.resizable().scaledToFit()
+                            } else { Color.clear }
                         }
-                        .buttonStyle(.plain)
+                        .frame(width: 18, height: 18)
+                    }
+                    Text(priority.name).foregroundStyle(theme.palette.foreground)
+                    Spacer()
+                    if priority.name == currentName {
+                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
                     }
                 }
+                .contentShape(Rectangle())
             }
             .task { await load() }
         }

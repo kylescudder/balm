@@ -63,6 +63,7 @@ public struct IssueListView: View {
                     }
                 }
         }
+        .environment(\.openIssue, OpenIssueAction { selection = $0 })
         .toolbar { toolbarContent }
         .sheet(isPresented: $showingFiltersSheet) {
             FilterSheetView(
