@@ -12,12 +12,23 @@ public extension JiraClient {
     ) -> AsyncThrowingStream<[JiraIssue], Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
-                // Ensure the tenant's Sprint custom field is requested (its id
-                // varies per site — e.g. customfield_10010 vs _10020).
+                // Ensure the tenant's Sprint and Instance custom fields are requested
+                // (their ids vary per site).
                 var effectiveFields = fields
                 if let sprintField = await resolveSprintFieldID(),
                    !effectiveFields.contains(sprintField) {
                     effectiveFields.append(sprintField)
+                }
+                let instanceField = await resolveInstanceFieldID()
+                if let instanceField {
+                    if !effectiveFields.contains(instanceField) {
+                        effectiveFields.append(instanceField)
+                    }
+                } else {
+                    // Field ID unknown — request all fields so the instance value is
+                    // present in the response. The field ID will be discovered from
+                    // expand=names and cached for subsequent calls.
+                    effectiveFields = ["*all"]
                 }
                 var token: String? = nil
                 repeat {
@@ -29,7 +40,18 @@ public extension JiraClient {
                             maxResults: pageSize
                         )
                         let page = try await send(endpoint)
-                        let mapped = page.issues.map(JiraIssueMapper.issue(from:))
+                        // Discover the instance field ID from expand=names and cache
+                        // it so subsequent issueStream calls use the efficient field list.
+                        let pageInstanceField: String?
+                        if let discovered = page.names?.first(where: {
+                            $0.value.localizedCaseInsensitiveContains("Instance")
+                        })?.key {
+                            seedInstanceFieldID(discovered)
+                            pageInstanceField = discovered
+                        } else {
+                            pageInstanceField = instanceField
+                        }
+                        let mapped = page.issues.map { JiraIssueMapper.issue(from: $0, instanceFieldID: pageInstanceField) }
                         continuation.yield(mapped)
                         if let nextToken = page.nextPageToken, page.isLast != true {
                             token = nextToken
@@ -64,13 +86,23 @@ public extension JiraClient {
         projectKey: String,
         sprints: [String],
         definition: FilterDefinition = .empty,
-        componentField: String = "component"
+        componentField: String = "component",
+        instanceField: String? = nil
     ) async throws -> [JiraIssue] {
+        // Prefer the caller's project-scoped field id (resolved from
+        // create-metadata); fall back to the actor's global name scan.
+        let resolvedInstanceField: String?
+        if let instanceField {
+            resolvedInstanceField = instanceField
+        } else {
+            resolvedInstanceField = await resolveInstanceFieldID()
+        }
         let builder = JQLBuilder(
             projectKey: projectKey,
             sprints: sprints,
             definition: definition,
-            componentField: componentField
+            componentField: componentField,
+            instanceFieldID: resolvedInstanceField
         )
         guard let jql = builder.build() else { throw JiraError.missingSprint }
         return try await issues(jql: jql)

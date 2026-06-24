@@ -2,12 +2,18 @@ import Foundation
 import BalmModels
 
 public enum JiraIssueMapper {
-    public static func issue(from raw: RawJiraIssue) -> JiraIssue {
+    public static func issue(from raw: RawJiraIssue, instanceFieldID: String? = nil) -> JiraIssue {
         let f = raw.fields
         let components = dedupedComponents(
             standard: f.components ?? [],
             custom: f.customfield_10312?.components ?? []
         )
+        // Prefer field names baked into the response (expand=names); fall back to
+        // the externally resolved field id from JiraClient.resolveInstanceFieldID().
+        let resolvedInstanceFieldID = raw.fieldNames.flatMap { names in
+            names.first { $0.value.localizedCaseInsensitiveContains("Instance") }?.key
+        } ?? instanceFieldID
+        let instanceName = resolvedInstanceFieldID.flatMap { raw.customFieldStrings[$0] }
         return JiraIssue(
             id: raw.id,
             key: raw.key,
@@ -25,7 +31,8 @@ public enum JiraIssueMapper {
             labels: f.labels ?? [],
             components: components,
             sprint: extractSprint(from: raw),
-            fixVersions: f.fixVersions ?? []
+            fixVersions: f.fixVersions ?? [],
+            instanceName: instanceName
         )
     }
 

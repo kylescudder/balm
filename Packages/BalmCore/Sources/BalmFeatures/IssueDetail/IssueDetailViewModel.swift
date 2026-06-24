@@ -67,8 +67,9 @@ public final class IssueDetailViewModel {
             async let detailReq = api.send(IssueEndpoints.GetDetail(issueKey: issueKey))
             async let transitionsReq = api.send(IssueEndpoints.Transitions(issueKey: issueKey))
 
+            let instanceField = await api.resolveInstanceFieldID()
             let raw = try await detailReq
-            let (mapped, bundle) = IssueDetailMapper.decode(raw)
+            let (mapped, bundle) = IssueDetailMapper.decode(raw, instanceFieldID: instanceField)
             issue = mapped
             details = bundle
 

@@ -34,6 +34,11 @@ struct IssueMetadataPanel: View {
             sprintField(issue)
             dueField(issue)
             componentsField(issue)
+            if let name = issue.instanceName {
+                readonlyField("Instance / Database") {
+                    Text(name).foregroundStyle(theme.palette.foreground)
+                }
+            }
             versionsField(issue)
             labelsField(issue)
             readonlyField("Created") { dateText(issue.created) }

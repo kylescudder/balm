@@ -118,6 +118,7 @@ public enum ProjectEndpoints {
     public struct Fields: JiraEndpoint {
         public struct Field: Decodable, Sendable {
             public let id: String
+            public let name: String?
             public let schema: Schema?
             public struct Schema: Decodable, Sendable {
                 public let custom: String?

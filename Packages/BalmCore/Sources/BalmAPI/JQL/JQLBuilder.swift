@@ -17,19 +17,22 @@ public struct JQLBuilder: Sendable, Equatable {
     /// select field passes e.g. `cf[10312]` (resolved from create-metadata).
     public let componentField: String
     public let orderByCreated: Bool
+    public let instanceFieldID: String?
 
     public init(
         projectKey: String,
         sprints: [String],
         definition: FilterDefinition = .empty,
         componentField: String = "component",
-        orderByCreated: Bool = true
+        orderByCreated: Bool = true,
+        instanceFieldID: String? = nil
     ) {
         self.projectKey = projectKey
         self.sprints = sprints
         self.definition = definition
         self.componentField = componentField
         self.orderByCreated = orderByCreated
+        self.instanceFieldID = instanceFieldID
     }
 
     public func build() -> String? {
@@ -55,7 +58,6 @@ public struct JQLBuilder: Sendable, Equatable {
                 clauses.append("(\(w))")
             }
         }
-
         var jql = clauses.joined(separator: " AND ")
         if let order = userOrderBy {
             jql += " order by \(order)"
@@ -125,7 +127,17 @@ public struct JQLBuilder: Sendable, Equatable {
     }
 
     private func compile(_ condition: FilterCondition) -> String? {
-        let field = condition.field == .components ? componentField : condition.field.jqlField
+        let field: String
+        if condition.field == .components {
+            field = componentField
+        } else if condition.field == .instanceName, let id = instanceFieldID {
+            let numericID = id.replacingOccurrences(of: "customfield_", with: "")
+            field = "cf[\(numericID)]"
+        } else if condition.field == .instanceName {
+            return nil
+        } else {
+            field = condition.field.jqlField
+        }
         switch condition.op {
         case .isEmpty:
             return "\(field) is EMPTY"

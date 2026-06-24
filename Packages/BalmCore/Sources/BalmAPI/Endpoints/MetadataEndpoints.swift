@@ -91,6 +91,23 @@ public enum MetadataEndpoints {
             }
             return nil
         }
+
+        /// Resolve the tenant's "Instance / Database" custom select from a
+        /// create-metadata field list: its field id (authoritative and
+        /// project-scoped — unlike a global `/field` name scan, which can hit a
+        /// like-named field from another project) plus its full option list.
+        /// `allowedValues` carries every configured option — uncapped and
+        /// independent of which values happen to appear on loaded issues.
+        public static func resolveInstanceField(
+            from fields: [FieldMeta]
+        ) -> (fieldId: String, values: [String])? {
+            guard let field = fields.first(where: { field in
+                guard let id = field.identifier, id.hasPrefix("customfield_") else { return false }
+                return (field.name ?? "").localizedCaseInsensitiveContains("Instance")
+            }), let id = field.identifier else { return nil }
+            let values = (field.allowedValues ?? []).compactMap(\.label).filter { !$0.isEmpty }
+            return (id, values)
+        }
     }
 
     /// GET /rest/api/3/label?startAt=0 — paginated global label index.
