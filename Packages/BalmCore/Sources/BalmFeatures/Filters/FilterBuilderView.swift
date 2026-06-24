@@ -176,6 +176,8 @@ private struct ConditionRow: View {
             return options.releases.map { MultiSelectOption(id: $0.id, label: $0.displayName) }
         case .dueDate:
             return []
+        case .instanceName:
+            return options.instanceNames.map { MultiSelectOption(id: $0, label: $0) }
         }
     }
 }

@@ -22,6 +22,7 @@ public struct AvailableFilterOptions: Sendable, Equatable {
     public var labels: [String]
     public var components: [String]
     public var releases: [NamedOption]
+    public var instanceNames: [String]
 
     public init(
         statuses: [String] = [],
@@ -31,7 +32,8 @@ public struct AvailableFilterOptions: Sendable, Equatable {
         reporters: [NamedOption] = [],
         labels: [String] = [],
         components: [String] = [],
-        releases: [NamedOption] = []
+        releases: [NamedOption] = [],
+        instanceNames: [String] = []
     ) {
         self.statuses = statuses
         self.priorities = priorities
@@ -41,6 +43,7 @@ public struct AvailableFilterOptions: Sendable, Equatable {
         self.labels = labels
         self.components = components
         self.releases = releases
+        self.instanceNames = instanceNames
     }
 
     public static let empty = AvailableFilterOptions()
@@ -54,7 +57,8 @@ public struct AvailableFilterOptions: Sendable, Equatable {
     public static func from(
         _ issues: [JiraIssue],
         extraComponents: [String] = [],
-        extraReleases: [JiraVersion] = []
+        extraReleases: [JiraVersion] = [],
+        extraInstanceNames: [String] = []
     ) -> AvailableFilterOptions {
         let statuses = Self.unique(issues.map(\.status.name))
         let priorities = Self.unique(issues.map(\.priority.name))
@@ -84,6 +88,7 @@ public struct AvailableFilterOptions: Sendable, Equatable {
 
         let labels = Self.unique(issues.flatMap(\.labels))
         let components = Self.unique(issues.flatMap { $0.components.map(\.name) } + extraComponents)
+        let instanceNames = Self.unique(issues.compactMap(\.instanceName) + extraInstanceNames)
 
         var releases: [NamedOption] = [
             NamedOption(id: JiraVersion.noReleaseSentinel, displayName: "No release")
@@ -102,7 +107,8 @@ public struct AvailableFilterOptions: Sendable, Equatable {
             reporters: reporters,
             labels: labels,
             components: components,
-            releases: releases
+            releases: releases,
+            instanceNames: instanceNames
         )
     }
 

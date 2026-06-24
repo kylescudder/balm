@@ -33,6 +33,11 @@ public final class IssueListViewModel {
     /// ones present on loaded issues.
     private var projectComponentNames: [String] = []
     private var projectVersions: [JiraVersion] = []
+    private var projectInstanceNames: [String] = []
+    /// The Instance/Database custom field id resolved from create-metadata
+    /// (e.g. `customfield_10801`). Authoritative and project-scoped — threaded
+    /// into the JQL builder so the Instance filter targets the right `cf[N]`.
+    private var projectInstanceFieldID: String?
     private var projectMetadataLoaded = false
     /// The JQL field that actually holds components for this project — the
     /// standard `component`, or a tenant custom select like `cf[10312]`,
@@ -199,9 +204,10 @@ public final class IssueListViewModel {
             loadState = .loaded
             return
         }
-        // A restored component filter needs the resolved JQL field before the
-        // first fetch, or it would query the wrong field and error.
-        if Self.usesComponents(userDefinition) {
+        // A restored component or instance filter needs its resolved JQL field
+        // before the first fetch, or it would target the wrong field (instance)
+        // or error (components).
+        if Self.usesResolvedField(userDefinition) {
             await loadProjectMetadataIfNeeded()
         }
         do {
@@ -209,7 +215,8 @@ public final class IssueListViewModel {
                 projectKey: project.key,
                 sprints: names,
                 definition: userDefinition,
-                componentField: componentFieldJQL
+                componentField: componentFieldJQL,
+                instanceField: projectInstanceFieldID
             )
             loadState = .loaded
         } catch is CancellationError {
@@ -233,7 +240,8 @@ public final class IssueListViewModel {
             filterOptions = AvailableFilterOptions.from(
                 issues,
                 extraComponents: projectComponentNames,
-                extraReleases: projectVersions
+                extraReleases: projectVersions,
+                extraInstanceNames: projectInstanceNames
             )
             filterOptionsSprints = key
             return
@@ -243,7 +251,8 @@ public final class IssueListViewModel {
             filterOptions = AvailableFilterOptions.from(
                 all,
                 extraComponents: projectComponentNames,
-                extraReleases: projectVersions
+                extraReleases: projectVersions,
+                extraInstanceNames: projectInstanceNames
             )
             filterOptionsSprints = key
         }
@@ -255,47 +264,69 @@ public final class IssueListViewModel {
     /// full value list, via create-metadata.
     private func loadProjectMetadataIfNeeded() async {
         guard !projectMetadataLoaded else { return }
-        let versions = try? await api.send(ProjectEndpoints.Versions(projectKeyOrId: project.key))
-        let component = await resolveComponentField()
+        async let versionsTask = api.send(ProjectEndpoints.Versions(projectKeyOrId: project.key))
+        async let metaTask = resolveCreateMetaFields()
+        let versions = try? await versionsTask
+        let meta = await metaTask
         // Everything threw (e.g. transient network) — leave unmarked so a later
         // reload retries. Any successful response counts as loaded.
-        guard versions != nil || component != nil else { return }
+        guard versions != nil || meta.component != nil || meta.instance != nil else { return }
         projectVersions = versions ?? []
-        if let component {
+        projectInstanceNames = meta.instance?.values ?? []
+        projectInstanceFieldID = meta.instance?.fieldId
+        if let component = meta.component {
             componentFieldJQL = component.jqlField
             projectComponentNames = component.values
         }
         projectMetadataLoaded = true
     }
 
-    /// Walk the project's issue types' create-metadata to find the field that
-    /// holds components — the standard `components` field or a tenant custom
-    /// select named "Component(s)". Returns its JQL field name and value list.
-    private func resolveComponentField() async -> (jqlField: String, values: [String])? {
+    /// One create-metadata pass over the project's first few issue types,
+    /// pulling out both the component field (its JQL name + value list — the
+    /// standard `components` or a tenant custom select) and the Instance /
+    /// Database field's full option list. Single source so metadata isn't
+    /// fetched twice. The Instance field's `allowedValues` is the complete,
+    /// uncapped option set — independent of which values appear on issues.
+    private func resolveCreateMetaFields() async
+        -> (component: (jqlField: String, values: [String])?,
+            instance: (fieldId: String, values: [String])?) {
         guard let types = try? await api.send(MetadataEndpoints.ProjectIssueTypes(projectID: project.id)) else {
-            return nil
+            return (nil, nil)
         }
+        var component: (jqlField: String, values: [String])?
+        var instanceFieldID: String?
+        var instanceNames = Set<String>()
         for type in types.prefix(5) {
             guard let id = type.id,
                   let meta = try? await api.send(
                     MetadataEndpoints.CreateMetaFields(projectIdOrKey: project.key, issueTypeId: id)
                   )
             else { continue }
-            if let resolved = MetadataEndpoints.CreateMetaFields.resolveComponentField(from: meta.fields) {
-                return resolved
+            if component == nil {
+                component = MetadataEndpoints.CreateMetaFields.resolveComponentField(from: meta.fields)
+            }
+            if let instance = MetadataEndpoints.CreateMetaFields.resolveInstanceField(from: meta.fields) {
+                instanceFieldID = instance.fieldId
+                instanceNames.formUnion(instance.values)
             }
         }
-        return nil
+        let instance = instanceFieldID.map {
+            (fieldId: $0, values: instanceNames.sorted { $0.localizedCompare($1) == .orderedAscending })
+        }
+        return (component, instance)
     }
 
-    /// Whether a structured definition filters on components (raw JQL is passed
-    /// through untouched, so it never needs the resolved field).
-    private static func usesComponents(_ definition: FilterDefinition) -> Bool {
+    /// Whether a structured definition filters on a field whose JQL name must be
+    /// resolved from create-metadata before querying — components (custom select
+    /// vs standard) or the tenant's Instance/Database custom field. Raw JQL is
+    /// passed through untouched, so it never needs resolution.
+    private static func usesResolvedField(_ definition: FilterDefinition) -> Bool {
         guard case .structured(let group) = definition else { return false }
         func walk(_ group: FilterGroup) -> Bool {
             for row in group.rows {
                 switch row.node {
-                case .condition(let c) where c.field == .components: return true
+                case .condition(let c) where c.field == .components || c.field == .instanceName:
+                    return true
                 case .condition: continue
                 case .group(let sub): if walk(sub) { return true }
                 }
@@ -310,8 +341,9 @@ public final class IssueListViewModel {
     /// nil on failure (e.g. unknown key).
     public func fetchIssue(key: String) async -> JiraIssue? {
         do {
+            let instanceField = await api.resolveInstanceFieldID()
             let raw = try await api.send(IssueEndpoints.GetDetail(issueKey: key))
-            return IssueDetailMapper.decode(raw).0
+            return IssueDetailMapper.decode(raw, instanceFieldID: instanceField).0
         } catch {
             toaster?.error("Couldn't open \(key): \(error.localizedDescription)")
             return nil

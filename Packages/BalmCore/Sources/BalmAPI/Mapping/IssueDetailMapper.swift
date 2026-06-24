@@ -5,8 +5,8 @@ public enum IssueDetailMapper {
     /// Produces both the domain `JiraIssue` and the `JiraIssueDetails` bundle
     /// (comments, attachments, changelog, issue links) from a single raw issue
     /// fetched with `expand=changelog&fields=*all`.
-    public static func decode(_ raw: RawJiraIssue) -> (JiraIssue, JiraIssueDetails) {
-        let issue = JiraIssueMapper.issue(from: raw)
+    public static func decode(_ raw: RawJiraIssue, instanceFieldID: String? = nil) -> (JiraIssue, JiraIssueDetails) {
+        let issue = JiraIssueMapper.issue(from: raw, instanceFieldID: instanceFieldID)
         let details = JiraIssueDetails(
             attachments: mapAttachments(raw.fields.attachment ?? []),
             comments: mapComments(raw.fields.comment?.comments ?? []),

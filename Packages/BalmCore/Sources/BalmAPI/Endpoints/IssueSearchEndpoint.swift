@@ -8,6 +8,8 @@ public enum IssueEndpoints {
             public let nextPageToken: String?
             public let isLast: Bool?
             public let total: Int?
+            /// Field-id → display-name map from `expand=names`.
+            public let names: [String: String]?
         }
 
         public typealias Response = PagedResponse
@@ -32,6 +34,7 @@ public enum IssueEndpoints {
             var items: [URLQueryItem] = [
                 URLQueryItem(name: "jql", value: jql),
                 URLQueryItem(name: "fields", value: fields.joined(separator: ",")),
+                URLQueryItem(name: "expand", value: "names"),
                 URLQueryItem(name: "maxResults", value: String(maxResults))
             ]
             if let token = nextPageToken {

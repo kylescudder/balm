@@ -8,6 +8,8 @@ public actor JiraClient {
 
     private var sprintFieldID: String?
     private var sprintFieldResolved = false
+    private var instanceFieldID: String?
+    private var instanceFieldResolved = false
 
     public init(
         tokens: any TokenProvider,
@@ -34,6 +36,30 @@ public actor JiraClient {
             sprintFieldID = nil
         }
         return sprintFieldID
+    }
+
+    /// Resolves (and caches) this tenant's Instance / Database custom field id
+    /// by matching the field name. Returns `nil` if discovery fails.
+    public func resolveInstanceFieldID() async -> String? {
+        if instanceFieldResolved { return instanceFieldID }
+        instanceFieldResolved = true
+        do {
+            let fields = try await send(ProjectEndpoints.Fields())
+            instanceFieldID = fields.first {
+                $0.name?.localizedCaseInsensitiveContains("Instance") == true
+            }?.id
+        } catch {
+            instanceFieldID = nil
+        }
+        return instanceFieldID
+    }
+
+    /// Seeds the cached instance field ID from an externally discovered value
+    /// (e.g. from `expand=names` on a search response). No-op if already known.
+    public func seedInstanceFieldID(_ id: String) {
+        guard instanceFieldID == nil else { return }
+        instanceFieldID = id
+        instanceFieldResolved = true
     }
 
     public func send<E: JiraEndpoint>(_ endpoint: E) async throws -> E.Response {

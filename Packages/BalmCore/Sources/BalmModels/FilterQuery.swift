@@ -13,6 +13,7 @@ public enum FilterField: String, Codable, Sendable, CaseIterable, Identifiable {
     case components
     case release
     case dueDate
+    case instanceName
 
     public var id: String { rawValue }
 
@@ -27,11 +28,14 @@ public enum FilterField: String, Codable, Sendable, CaseIterable, Identifiable {
         case .components: return "Components"
         case .release: return "Release"
         case .dueDate: return "Due Date"
+        case .instanceName: return "Instance"
         }
     }
 
     /// The JQL field name. Mirrors `JQLBuilder`'s historic mappings exactly so
     /// the compiled output is unchanged for the simple AND case.
+    /// For `.instanceName` the actual field name is dynamic (`cf[N]`); the
+    /// builder substitutes it when the tenant's field id is known.
     public var jqlField: String {
         switch self {
         case .status: return "status"
@@ -43,6 +47,7 @@ public enum FilterField: String, Codable, Sendable, CaseIterable, Identifiable {
         case .components: return "component"
         case .release: return "fixVersion"
         case .dueDate: return "duedate"
+        case .instanceName: return "cf[INSTANCE]"
         }
     }
 
@@ -225,6 +230,7 @@ public extension FilterOptions {
         add(.components, components)
         add(.release, release)
         add(.reporter, reporter)
+        add(.instanceName, instanceName)
         return FilterGroup(rows: rows)
     }
 

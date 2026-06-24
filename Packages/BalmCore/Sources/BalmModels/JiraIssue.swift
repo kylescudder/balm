@@ -18,6 +18,7 @@ public struct JiraIssue: Codable, Sendable, Hashable, Identifiable {
     public var components: [JiraComponent]
     public var sprint: JiraSprint?
     public var fixVersions: [JiraVersion]
+    public var instanceName: String?
 
     public init(
         id: String,
@@ -36,7 +37,8 @@ public struct JiraIssue: Codable, Sendable, Hashable, Identifiable {
         labels: [String] = [],
         components: [JiraComponent] = [],
         sprint: JiraSprint? = nil,
-        fixVersions: [JiraVersion] = []
+        fixVersions: [JiraVersion] = [],
+        instanceName: String? = nil
     ) {
         self.id = id
         self.key = key
@@ -55,6 +57,7 @@ public struct JiraIssue: Codable, Sendable, Hashable, Identifiable {
         self.components = components
         self.sprint = sprint
         self.fixVersions = fixVersions
+        self.instanceName = instanceName
     }
 }
 

@@ -21,7 +21,7 @@ public extension IssueEndpoints {
                 path: "/issue/\(issueKey)",
                 queryItems: [
                     URLQueryItem(name: "fields", value: "*all"),
-                    URLQueryItem(name: "expand", value: "changelog,renderedFields"),
+                    URLQueryItem(name: "expand", value: "changelog,renderedFields,names"),
                     URLQueryItem(name: "properties", value: "*all")
                 ]
             )

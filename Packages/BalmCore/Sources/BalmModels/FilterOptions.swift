@@ -12,6 +12,7 @@ public struct FilterOptions: Codable, Sendable, Hashable {
     public var release: [String]
     public var dueDateFrom: String?
     public var dueDateTo: String?
+    public var instanceName: [String]
 
     public init(
         status: [String] = [],
@@ -24,7 +25,8 @@ public struct FilterOptions: Codable, Sendable, Hashable {
         sprint: [String] = [],
         release: [String] = [],
         dueDateFrom: String? = nil,
-        dueDateTo: String? = nil
+        dueDateTo: String? = nil,
+        instanceName: [String] = []
     ) {
         self.status = status
         self.priority = priority
@@ -37,6 +39,7 @@ public struct FilterOptions: Codable, Sendable, Hashable {
         self.release = release
         self.dueDateFrom = dueDateFrom
         self.dueDateTo = dueDateTo
+        self.instanceName = instanceName
     }
 
     public static let empty = FilterOptions()
@@ -50,6 +53,7 @@ public struct FilterOptions: Codable, Sendable, Hashable {
             && components.isEmpty
             && reporter.isEmpty
             && release.isEmpty
+            && instanceName.isEmpty
             && dueDateFrom == nil
             && dueDateTo == nil
     }
@@ -66,6 +70,7 @@ public struct FilterOptions: Codable, Sendable, Hashable {
         if !components.isEmpty { n += 1 }
         if !reporter.isEmpty { n += 1 }
         if !release.isEmpty { n += 1 }
+        if !instanceName.isEmpty { n += 1 }
         if dueDateFrom != nil || dueDateTo != nil { n += 1 }
         return n
     }

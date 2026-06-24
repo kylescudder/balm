@@ -11,9 +11,16 @@ public struct RawJiraIssue: Decodable, Sendable {
     /// Sprints found by scanning every `customfield_*` for sprint-shaped values.
     /// Tenant-agnostic — the Sprint custom field id differs per Jira site.
     public let sprintCandidates: [JiraSprint]
+    /// All custom fields whose raw value is a plain non-empty string, keyed by
+    /// field id. Used by `JiraIssueMapper` to extract tenant-specific string fields
+    /// (e.g. Instance / Database) once the field id has been resolved.
+    public let customFieldStrings: [String: String]
+    /// Field-id → display-name map from `expand=names`. Present on detail
+    /// responses; nil on search results (names live at page level there).
+    public let fieldNames: [String: String]?
 
     enum CodingKeys: String, CodingKey {
-        case id, key, fields, changelog
+        case id, key, fields, changelog, names
     }
 
     public init(from decoder: Decoder) throws {
@@ -22,9 +29,31 @@ public struct RawJiraIssue: Decodable, Sendable {
         self.key = try c.decode(String.self, forKey: .key)
         self.fields = try c.decode(Fields.self, forKey: .fields)
         self.changelog = try c.decodeIfPresent(RawJiraChangelogPage.self, forKey: .changelog)
-        // Re-read the fields object generically to locate the sprint custom field.
+        self.fieldNames = try? c.decode([String: String].self, forKey: .names)
+        // Re-read the fields object generically to locate sprint and string custom fields.
         let rawFields = (try? c.decode([String: AnyJSON].self, forKey: .fields)) ?? [:]
         self.sprintCandidates = RawJiraIssue.scanSprints(in: rawFields)
+        self.customFieldStrings = RawJiraIssue.scanStringFields(in: rawFields)
+    }
+
+    /// Collects all `customfield_*` entries whose value resolves to a non-empty
+    /// string. Handles plain strings (text/url fields) and `{"value":"…"}` objects
+    /// (single-select / radio-button fields).
+    static func scanStringFields(in fields: [String: AnyJSON]) -> [String: String] {
+        var result: [String: String] = [:]
+        for (key, value) in fields where key.hasPrefix("customfield_") {
+            switch value {
+            case .string(let s) where !s.isEmpty:
+                result[key] = s
+            case .object(let o):
+                if case .string(let s)? = o["value"], !s.isEmpty {
+                    result[key] = s
+                }
+            default:
+                break
+            }
+        }
+        return result
     }
 
     /// Scans all `customfield_*` entries for an array of sprint values (objects
