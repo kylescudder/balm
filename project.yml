@@ -11,7 +11,10 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    DEVELOPMENT_TEAM: ""
+    # Apple Development team — pinned so `xcodegen generate` never resets Signing
+    # to "None". This is the "Kyle Scudder" (Individual) team Xcode is signed into.
+    # Change this to your own Team ID if you build under a different account.
+    DEVELOPMENT_TEAM: "6AAGJ9Y234"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     GENERATE_INFOPLIST_FILE: NO
     INFOPLIST_FILE: App/Info.plist

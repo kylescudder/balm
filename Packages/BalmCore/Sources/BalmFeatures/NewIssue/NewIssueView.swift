@@ -18,7 +18,12 @@ public struct NewIssueView: View {
     @State private var assignee: JiraUser?
     @State private var priority: JiraPriority?
     @State private var sprint: JiraSprint?
-    @State private var components: [String] = []
+    @State private var componentFieldID: String?
+    @State private var componentFieldName = "Components"
+    @State private var componentRequired = false
+    @State private var componentMultiple = false
+    @State private var componentOptions: [ComponentOption] = []
+    @State private var selectedComponents: [ComponentOption] = []
     @State private var fixVersions: [JiraVersion] = []
     @State private var labels: [String] = []
     @State private var dueDate: String?
@@ -75,8 +80,15 @@ public struct NewIssueView: View {
                 }
 
                 Section("Categorisation") {
-                    picker("Components", value: components.isEmpty ? nil : components.joined(separator: ", ")) {
-                        activePicker = .components
+                    if componentFieldID != nil {
+                        picker(
+                            componentFieldName,
+                            value: selectedComponents.isEmpty
+                                ? nil
+                                : selectedComponents.map(\.label).joined(separator: ", ")
+                        ) {
+                            activePicker = .components
+                        }
                     }
                     picker("Fix Versions", value: fixVersions.isEmpty ? nil : fixVersions.map(\.name).joined(separator: ", ")) {
                         activePicker = .versions
@@ -111,14 +123,18 @@ public struct NewIssueView: View {
                 pickerSheet(kind)
             }
             .task { await loadIssueTypes() }
+            .task(id: issueType?.id) { await loadComponentField() }
         }
         .frame(minWidth: 480, minHeight: 540)
     }
 
     private var canSubmit: Bool {
-        !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        issueType != nil &&
-        !isSubmitting
+        guard !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              issueType != nil,
+              !isSubmitting else { return false }
+        // Honour a required component field — Jira would reject the create otherwise.
+        if componentRequired && componentFieldID != nil && selectedComponents.isEmpty { return false }
+        return true
     }
 
     @ViewBuilder
@@ -167,9 +183,11 @@ public struct NewIssueView: View {
             )
         case .components:
             ComponentsPickerView(
-                projectKey: project.key,
-                current: components,
-                onApply: { components = $0 }
+                title: componentFieldName,
+                options: componentOptions,
+                allowsMultiple: componentMultiple,
+                current: selectedComponents,
+                onApply: { selectedComponents = $0 }
             )
         case .versions:
             VersionsPickerView(
@@ -202,6 +220,40 @@ public struct NewIssueView: View {
         }
     }
 
+    /// Resolve the project's component field from the selected issue type's
+    /// create metadata. Team-managed projects have no system `components` field —
+    /// "Component" is a custom select — so options must come from createmeta
+    /// rather than the (empty) `/project/{key}/components` endpoint.
+    private func loadComponentField() async {
+        guard let typeID = issueType?.id else {
+            componentFieldID = nil; componentOptions = []
+            return
+        }
+        do {
+            let resp = try await env.api.send(
+                MetadataEndpoints.CreateMetaFields(projectIdOrKey: project.key, issueTypeId: typeID)
+            )
+            guard let field = MetadataEndpoints.CreateMetaFields.componentField(from: resp.fields),
+                  let fieldID = field.identifier else {
+                componentFieldID = nil; componentOptions = []; selectedComponents = []
+                return
+            }
+            componentFieldID = fieldID
+            componentFieldName = field.name ?? "Components"
+            componentRequired = field.required ?? false
+            componentMultiple = field.isMultiValue
+            componentOptions = (field.allowedValues ?? []).compactMap { value in
+                guard let id = value.id, let label = value.label, !label.isEmpty else { return nil }
+                return ComponentOption(id: id, label: label)
+            }
+            // Drop any prior selection that isn't valid for the resolved field.
+            let valid = Set(componentOptions.map(\.id))
+            selectedComponents = selectedComponents.filter { valid.contains($0.id) }
+        } catch {
+            env.toaster.error("Couldn't load fields: \(error.localizedDescription)")
+        }
+    }
+
     private func submit() {
         guard canSubmit, let issueType else { return }
         isSubmitting = true
@@ -211,7 +263,9 @@ public struct NewIssueView: View {
         let sprintRef = sprint
         let summaryValue = summary
         let descValue = descriptionText
-        let componentsValue = components
+        let componentFieldIDValue = componentFieldID
+        let componentMultipleValue = componentMultiple
+        let selectedComponentIDs = selectedComponents.map(\.id)
         let versionsValue = fixVersions
         let labelsValue = labels
         let dueDateValue = dueDate
@@ -236,8 +290,12 @@ public struct NewIssueView: View {
                 let (k, v) = IssueFieldPatch.priority(name: priorityName)
                 fields[k] = v
             }
-            if !componentsValue.isEmpty {
-                let (k, v) = IssueFieldPatch.components(names: componentsValue)
+            if let componentFieldIDValue, !selectedComponentIDs.isEmpty {
+                let (k, v) = IssueFieldPatch.optionField(
+                    componentFieldIDValue,
+                    optionIDs: selectedComponentIDs,
+                    multiple: componentMultipleValue
+                )
                 fields[k] = v
             }
             if !versionsValue.isEmpty {
