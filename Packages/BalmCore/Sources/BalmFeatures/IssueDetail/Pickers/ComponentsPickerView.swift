@@ -3,66 +3,74 @@ import BalmModels
 import BalmAPI
 import BalmDesignSystem
 
+/// One selectable option for the create modal's component field, addressed by
+/// the Jira option `id` (submitted) with a human `label` (displayed/filtered).
+struct ComponentOption: Hashable, Identifiable {
+    let id: String
+    let label: String
+}
+
+/// Keyboard-filterable picker for the New Issue "Component" field. Options are
+/// supplied by the caller from create metadata, so it works for both the
+/// standard `components` field and tenant custom selects (e.g.
+/// `customfield_10312`). Single-select fields select-and-dismiss; multi-select
+/// fields toggle membership and confirm with Apply.
 struct ComponentsPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.balmTheme) private var theme
-    @Environment(AppEnvironment.self) private var env
 
-    let projectKey: String
-    let current: [String]
-    let onApply: ([String]) -> Void
+    let title: String
+    let options: [ComponentOption]
+    let allowsMultiple: Bool
+    let onApply: ([ComponentOption]) -> Void
 
-    @State private var available: [JiraComponent] = []
-    @State private var draft: Set<String>
-    @State private var isLoading = false
+    @State private var draft: Set<String>   // selected option ids
 
-    init(projectKey: String, current: [String], onApply: @escaping ([String]) -> Void) {
-        self.projectKey = projectKey
-        self.current = current
+    init(
+        title: String,
+        options: [ComponentOption],
+        allowsMultiple: Bool,
+        current: [ComponentOption],
+        onApply: @escaping ([ComponentOption]) -> Void
+    ) {
+        self.title = title
+        self.options = options
+        self.allowsMultiple = allowsMultiple
         self.onApply = onApply
-        self._draft = State(initialValue: Set(current))
+        self._draft = State(initialValue: Set(current.map(\.id)))
     }
 
     var body: some View {
         PickerScaffold(
-            title: "Components",
+            title: title,
             confirmTitle: "Apply",
-            onConfirm: { onApply(Array(draft).sorted()) }
+            onConfirm: { onApply(options.filter { draft.contains($0.id) }) }
         ) {
             KeyboardFilterList(
-                items: available,
-                prompt: "Filter components",
-                isLoading: isLoading,
-                emptyText: "No components defined for this project.",
-                filterText: { $0.name },
-                onActivate: { toggle($0.name) }
-            ) { component in
+                items: options,
+                prompt: "Filter \(title.lowercased())",
+                emptyText: "No \(title.lowercased()) defined for this project.",
+                filterText: { $0.label },
+                onActivate: { activate($0) }
+            ) { option in
                 HStack {
-                    Text(component.name).foregroundStyle(theme.palette.foreground)
+                    Text(option.label).foregroundStyle(theme.palette.foreground)
                     Spacer()
-                    if draft.contains(component.name) {
+                    if draft.contains(option.id) {
                         Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
                     }
                 }
                 .contentShape(Rectangle())
             }
-            .task { await load() }
         }
     }
 
-    private func toggle(_ name: String) {
-        if draft.contains(name) { draft.remove(name) } else { draft.insert(name) }
-    }
-
-    private func load() async {
-        guard available.isEmpty else { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            available = try await env.api.send(ProjectEndpoints.Components(projectKeyOrId: projectKey))
-                .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
-        } catch {
-            env.toaster.error("Couldn't load components: \(error.localizedDescription)")
+    private func activate(_ option: ComponentOption) {
+        if allowsMultiple {
+            if draft.contains(option.id) { draft.remove(option.id) } else { draft.insert(option.id) }
+        } else {
+            onApply([option])
+            dismiss()
         }
     }
 }

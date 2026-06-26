@@ -191,6 +191,20 @@ public enum IssueFieldPatch {
         ("fixVersions", .array(ids.map { .object(["id": .string($0)]) }))
     }
 
+    /// A select / multi-select field addressed by its create-metadata field id
+    /// (the system `components` field or a custom select like
+    /// `customfield_10312`), with options referenced by id — Jira accepts ids
+    /// for both. `multiple` chooses the array vs single-object shape from the
+    /// field's schema: `[{ "id": … }, …]` vs `{ "id": … }`.
+    public static func optionField(
+        _ fieldId: String,
+        optionIDs: [String],
+        multiple: Bool
+    ) -> (String, AnyJSON) {
+        let nodes = optionIDs.map { AnyJSON.object(["id": .string($0)]) }
+        return multiple ? (fieldId, .array(nodes)) : (fieldId, nodes.first ?? .null)
+    }
+
     /// Plain-text description, wrapped as a minimal ADF doc.
     public static func description(plainText text: String) -> (String, AnyJSON) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

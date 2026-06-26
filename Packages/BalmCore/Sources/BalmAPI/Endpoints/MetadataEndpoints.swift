@@ -39,10 +39,24 @@ public enum MetadataEndpoints {
             public let fieldId: String?
             public let key: String?
             public let name: String?
+            public let required: Bool?
+            public let schema: Schema?
             public let allowedValues: [AllowedValue]?
 
             /// The canonical field id, preferring `fieldId` over the legacy `key`.
             public var identifier: String? { fieldId ?? key }
+
+            /// True when the field stores a list (e.g. the system `components`
+            /// field, `type == "array"`) rather than a single option (e.g. a
+            /// custom single-select "Component", `type == "option"`).
+            public var isMultiValue: Bool { schema?.type == "array" }
+
+            public struct Schema: Decodable, Sendable {
+                public let type: String?
+                public let system: String?
+                public let custom: String?
+                public let customId: Int?
+            }
         }
         public struct AllowedValue: Decodable, Sendable {
             public let id: String?
@@ -90,6 +104,22 @@ public enum MetadataEndpoints {
                 return ("cf[\(number)]", labels(custom))
             }
             return nil
+        }
+
+        /// The component field as a full `FieldMeta` — for the create form,
+        /// which needs the field id, option ids, arity and required flag, not
+        /// just the JQL labels `resolveComponentField` returns. Same selection
+        /// rule: prefer the standard `components` field, else a custom select
+        /// named "Component(s)".
+        public static func componentField(from fields: [FieldMeta]) -> FieldMeta? {
+            if let standard = fields.first(where: { $0.identifier == "components" }) {
+                return standard
+            }
+            return fields.first(where: { field in
+                guard let id = field.identifier, id.hasPrefix("customfield_") else { return false }
+                let name = (field.name ?? "").lowercased()
+                return name == "component" || name == "components"
+            })
         }
 
         /// Resolve the tenant's "Instance / Database" custom select from a
