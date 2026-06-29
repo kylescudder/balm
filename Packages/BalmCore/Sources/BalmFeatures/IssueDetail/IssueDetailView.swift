@@ -68,6 +68,7 @@ public struct IssueDetailView: View {
                     }
                     .buttonStyle(.borderless)
                     .help("Open \(currentIssue.key) in Jira")
+                    .accessibilityLabel("Open \(currentIssue.key) in Jira")
                 }
                 Button { model.reload() } label: {
                     Image(systemName: "arrow.clockwise")
