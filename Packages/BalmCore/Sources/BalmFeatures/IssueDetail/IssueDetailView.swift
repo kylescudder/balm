@@ -12,6 +12,7 @@ import UIKit
 public struct IssueDetailView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.balmTheme) private var theme
+    @Environment(\.openURL) private var openURL
 
     @State private var model: IssueDetailViewModel
     private let initialIssue: JiraIssue
@@ -61,6 +62,14 @@ public struct IssueDetailView: View {
                     ProgressView().controlSize(.small)
                 }
                 Spacer()
+                if let url = issueBrowseURL {
+                    Button { openURL(url) } label: {
+                        Text("🦕")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Open \(currentIssue.key) in Jira")
+                    .accessibilityLabel("Open \(currentIssue.key) in Jira")
+                }
                 Button { model.reload() } label: {
                     Image(systemName: "arrow.clockwise")
                 }
