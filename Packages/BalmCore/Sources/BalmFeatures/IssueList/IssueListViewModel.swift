@@ -338,16 +338,32 @@ public final class IssueListViewModel {
 
     /// Fetch a single issue by key for the ⌘K go-to-ticket flow — works even
     /// when the issue isn't in the currently loaded view. Toasts and returns
-    /// nil on failure (e.g. unknown key).
-    public func fetchIssue(key: String) async -> JiraIssue? {
+    /// nil on failure (e.g. unknown key), unless `notifyFailure` is false.
+    public func fetchIssue(key: String, notifyFailure: Bool = true) async -> JiraIssue? {
         do {
             let instanceField = await api.resolveInstanceFieldID()
             let raw = try await api.send(IssueEndpoints.GetDetail(issueKey: key))
             return IssueDetailMapper.decode(raw, instanceFieldID: instanceField).0
         } catch {
-            toaster?.error("Couldn't open \(key): \(error.localizedDescription)")
+            if notifyFailure {
+                toaster?.error("Couldn't open \(key): \(error.localizedDescription)")
+            }
             return nil
         }
+    }
+
+    /// Refresh the view after creating `key`. The JQL search backing the list
+    /// is eventually consistent, so a plain reload can miss a just-created
+    /// issue — fetch it directly by key (strongly consistent) and pin it to
+    /// the top if the search results don't include it yet.
+    @discardableResult
+    public func refreshAfterCreate(key: String) async -> JiraIssue? {
+        let created = await fetchIssue(key: key, notifyFailure: false)
+        await reloadAwaiting()
+        if let created, !issues.contains(where: { $0.key == created.key }) {
+            issues.insert(created, at: 0)
+        }
+        return created ?? issues.first { $0.key == key }
     }
 
     /// Apply an issue change broadcast by the detail screen (status, assignee,

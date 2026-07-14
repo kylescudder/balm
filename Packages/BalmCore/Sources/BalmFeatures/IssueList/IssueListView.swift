@@ -3,6 +3,11 @@ import BalmModels
 import BalmAuth
 import BalmAPI
 import BalmDesignSystem
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 public enum IssueViewMode: String, CaseIterable, Identifiable, Sendable {
     case list
@@ -15,6 +20,9 @@ public enum IssueViewMode: String, CaseIterable, Identifiable, Sendable {
 public struct IssueListView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.balmTheme) private var theme
+
+    /// iOS pushes detail via the shell's `openIssue`; macOS drives `selection`.
+    @Environment(\.openIssue) private var openIssueAction
 
     @Binding private var selection: JiraIssue?
     @State private var model: IssueListViewModel
@@ -82,7 +90,8 @@ public struct IssueListView: View {
             model: model,
             filterStore: filterStore,
             taskID: model.project.id,
-            reconnect: reconnectAndLoad
+            reconnect: reconnectAndLoad,
+            onIssueCreated: handleCreated
         )
         .background { viewShortcutSink }
         .id(model.project.id)
@@ -136,7 +145,8 @@ public struct IssueListView: View {
                 model: model,
                 filterStore: filterStore,
                 taskID: model.project.id,
-                reconnect: reconnectAndLoad
+                reconnect: reconnectAndLoad,
+                onIssueCreated: handleCreated
             )
             .id(model.project.id)
     }
@@ -364,6 +374,42 @@ public struct IssueListView: View {
         .refreshable { await model.reloadAwaiting() }
     }
 
+    /// Post-create: refresh the list so the new ticket is immediately visible,
+    /// and raise a success toast with quick actions for it.
+    private func handleCreated(key: String) {
+        Task { await model.refreshAfterCreate(key: key) }
+        env.toaster.success("Created \(key)", actions: [
+            .init(title: "Copy \(key)") {
+                setClipboard(key)
+                env.toaster.info("Copied \(key)")
+            },
+            .init(title: "Open") {
+                Task {
+                    var issue = model.issues.first { $0.key == key }
+                    if issue == nil { issue = await model.fetchIssue(key: key) }
+                    if let issue { openCreatedIssue(issue) }
+                }
+            }
+        ])
+    }
+
+    private func openCreatedIssue(_ issue: JiraIssue) {
+        #if os(macOS)
+        selection = issue
+        #else
+        openIssueAction(issue)
+        #endif
+    }
+
+    private func setClipboard(_ string: String) {
+        #if canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+        #elseif canImport(UIKit)
+        UIPasteboard.general.string = string
+        #endif
+    }
+
     private func reconnectAndLoad() async {
         BalmAPI_PlaceholderForState.shared.api = env.api
         let real = IssueListViewModel(project: model.project, api: env.api, toaster: env.toaster)
@@ -423,7 +469,8 @@ private extension View {
         model: IssueListViewModel,
         filterStore: FilterStore,
         taskID: String,
-        reconnect: @escaping () async -> Void
+        reconnect: @escaping () async -> Void,
+        onIssueCreated: @escaping (String) -> Void
     ) -> some View {
         self
             .sheet(isPresented: showingSprintPicker) {
@@ -434,7 +481,7 @@ private extension View {
                 NewIssueView(
                     project: model.project,
                     defaultSprint: model.availableSprints.first { model.selectedSprintIDs.contains($0.name) },
-                    onCreated: { _ in model.reload() }
+                    onCreated: { onIssueCreated($0.key) }
                 )
             }
             .onReceive(NotificationCenter.default.publisher(for: .balmCreateIssueRequested)) { _ in
