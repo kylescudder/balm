@@ -319,7 +319,8 @@ public struct NewIssueView: View {
                         IssueEndpoints.AddToSprint(sprintID: id, issueKeys: [response.key])
                     )
                 }
-                env.toaster.success("Created \(response.key)")
+                // Success feedback (toast + refresh) is the presenting view's
+                // job — it owns the list and navigation the toast acts on.
                 onCreated(response)
                 dismiss()
             } catch {
