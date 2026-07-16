@@ -106,7 +106,9 @@ public struct FilterSheetView: View {
                 }
             }
         }
+        #if os(macOS)
         .frame(minWidth: 560, minHeight: 580)
+        #endif
         .onChange(of: mode) { _, newMode in
             // First switch to Advanced prefills the editor from the builder so
             // the user can tweak the compiled JQL. Switching back keeps the
