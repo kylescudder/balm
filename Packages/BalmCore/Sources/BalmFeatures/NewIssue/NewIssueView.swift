@@ -63,8 +63,9 @@ public struct NewIssueView: View {
                 }
 
                 Section("Description") {
-                    TextEditor(text: $descriptionText)
-                        .frame(minHeight: 120, maxHeight: 200)
+                    TextField("Description", text: $descriptionText, axis: .vertical)
+                        .lineLimit(5...10)
+                        .labelsHidden()
                 }
 
                 Section("Assignment") {
@@ -125,7 +126,9 @@ public struct NewIssueView: View {
             .task { await loadIssueTypes() }
             .task(id: issueType?.id) { await loadComponentField() }
         }
+        #if os(macOS)
         .frame(minWidth: 480, minHeight: 540)
+        #endif
     }
 
     private var canSubmit: Bool {
@@ -140,16 +143,14 @@ public struct NewIssueView: View {
     @ViewBuilder
     private func picker(_ title: String, value: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
-                Text(title)
-                    .foregroundStyle(theme.palette.foreground)
-                Spacer()
-                Text(value ?? "Pick…")
-                    .foregroundStyle(value == nil ? theme.palette.mutedForeground : theme.palette.foreground)
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(theme.palette.mutedForeground)
+            LabeledContent(title) {
+                HStack(spacing: theme.spacing.xs) {
+                    Text(value ?? "Pick…")
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
         .buttonStyle(.plain)

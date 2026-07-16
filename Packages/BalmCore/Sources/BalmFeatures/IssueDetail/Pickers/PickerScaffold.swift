@@ -49,7 +49,9 @@ struct PickerScaffold<Content: View>: View {
                     }
                 }
         }
+        #if os(macOS)
         .frame(minWidth: 360, minHeight: 420)
+        #endif
     }
 }
 
