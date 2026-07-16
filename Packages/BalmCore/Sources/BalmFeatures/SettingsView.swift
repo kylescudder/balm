@@ -144,10 +144,6 @@ public struct SettingsView: View {
         Section("About") {
             LabeledContent("Version", value: Self.versionString)
             LabeledContent("Build", value: Self.buildString)
-            LabeledContent("Backend", value: env.oauthConfig.tokenExchangeEndpoint
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .absoluteString)
         }
     }
 
