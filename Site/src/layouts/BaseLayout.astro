@@ -7,17 +7,18 @@ import Header from "../components/Header.astro";
 interface Props {
   title: string;
   description: string;
-  current?: "home" | "privacy" | "terms" | "support";
+  ogTitle?: string;
+  bodyClass?: string;
 }
 
-const { title, description, current = "home" } = Astro.props;
+const { title, description, ogTitle = title, bodyClass = "" } = Astro.props;
 ---
 
 <!doctype html>
 <html lang="en">
-  <DocumentHead title={title} description={description} />
-  <body>
-    <Header current={current} />
+  <DocumentHead title={title} description={description} ogTitle={ogTitle} />
+  <body class={bodyClass}>
+    <Header />
     <slot />
     <Footer />
   </body>

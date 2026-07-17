@@ -5,14 +5,15 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 <BaseLayout
   title="Balm - a native, keyboard-driven Jira client"
   description="Balm is a native, keyboard-driven Jira Cloud client for macOS and iOS. Calm, fast, and one key away."
-  current="home"
 >
   <main class="app-page">
     <section class="product-layout">
       <div class="feed-column">
         <div class="feed-header">
           <p>Native Jira, without the tab hunt.</p>
-          <h1>A calmer work journal for the issues you actually need to move.</h1>
+          <h1>
+            A calmer work journal for the issues you actually need to move.
+          </h1>
         </div>
 
         <article class="entry-card spotlight">
@@ -20,7 +21,10 @@ import BaseLayout from "../layouts/BaseLayout.astro";
           <div>
             <p class="entry-kicker">Keyboard-first workflow</p>
             <h2>Everything important is one key away.</h2>
-            <p>Create, search, filter, transition, comment, and assign without digging through browser chrome.</p>
+            <p>
+              Create, search, filter, transition, comment, and assign without
+              digging through browser chrome.
+            </p>
             <div class="key-strip" aria-label="Keyboard shortcuts">
               <kbd>C</kbd>
               <kbd>F</kbd>
@@ -36,7 +40,10 @@ import BaseLayout from "../layouts/BaseLayout.astro";
           <div>
             <p class="entry-kicker">Board, list, and inbox</p>
             <h2>Move between the shapes of work without switching tools.</h2>
-            <p>Scan a board, work a dense list, or catch up from an issue inbox built around the Jira work you already own, watch, and report.</p>
+            <p>
+              Scan a board, work a dense list, or catch up from an issue inbox
+              built around the Jira work you already own, watch, and report.
+            </p>
           </div>
         </article>
 
@@ -45,7 +52,10 @@ import BaseLayout from "../layouts/BaseLayout.astro";
           <div>
             <p class="entry-kicker">Private by design</p>
             <h2>Your Jira data stays on your device and in Atlassian.</h2>
-            <p>No analytics, no tracking, no hosted copy of your issues, comments, attachments, or projects.</p>
+            <p>
+              No analytics, no tracking, no hosted copy of your issues,
+              comments, attachments, or projects.
+            </p>
           </div>
         </article>
 
@@ -54,26 +64,42 @@ import BaseLayout from "../layouts/BaseLayout.astro";
           <div>
             <p class="entry-kicker">Notifications, quietly</p>
             <h2>An inbox for the issues you watch, report, or own.</h2>
-            <p>Read state follows you between your Mac and iPhone without a server reading your issues.</p>
+            <p>
+              Read state follows you between your Mac and iPhone without a
+              server reading your issues.
+            </p>
           </div>
         </article>
       </div>
 
       <aside class="feed-sidebar">
         <section class="sidebar-section brand-card">
-          <img src="/assets/balm-droplet.svg" alt="" width="56" height="56">
+          <img src="/assets/balm-droplet.svg" alt="" width="56" height="56" />
           <h2>Balm.</h2>
           <p>A native, keyboard-driven Jira client for Mac and iPhone.</p>
         </section>
 
         <section class="sidebar-section" id="install">
           <p class="sidebar-label">Install</p>
-          <div class="install install-desktop" role="group" aria-label="Install with Homebrew">
-            <span class="prompt">$</span> brew tap kylescudder/tap<br>
+          <div
+            class="install install-desktop"
+            role="group"
+            aria-label="Install with Homebrew"
+          >
+            <span class="prompt">$</span> brew tap kylescudder/tap<br />
             <span class="prompt">$</span> brew install --cask balm
           </div>
-          <a class="app-store-link install-mobile" href="https://apps.apple.com/search?term=Balm%20Jira" aria-label="Download Balm on the App Store">
-            <img src="/assets/download-on-app-store.svg" alt="Download on the App Store" width="135" height="40">
+          <a
+            class="app-store-link install-mobile"
+            href="https://apps.apple.com/search?term=Balm%20Jira"
+            aria-label="Download Balm on the App Store"
+          >
+            <img
+              src="/assets/download-on-app-store.svg"
+              alt="Download on the App Store"
+              width="135"
+              height="40"
+            />
           </a>
         </section>
 
@@ -96,5 +122,4 @@ import BaseLayout from "../layouts/BaseLayout.astro";
       </aside>
     </section>
   </main>
-
 </BaseLayout>
