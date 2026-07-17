@@ -1,0 +1,37 @@
+---
+interface Props {
+  icon: string;
+  kicker: string;
+  title: string;
+  body: string;
+  spotlight?: boolean;
+  shortcuts?: string[];
+}
+
+const {
+  icon,
+  kicker,
+  title,
+  body,
+  spotlight = false,
+  shortcuts = [],
+} = Astro.props;
+---
+
+<article class:list={["entry-card", { spotlight }]}>
+  <div class="entry-icon">{icon}</div>
+  <div>
+    <p class="entry-kicker">{kicker}</p>
+    <h2>{title}</h2>
+    <p>{body}</p>
+    {
+      shortcuts.length > 0 && (
+        <div class="key-strip" aria-label="Keyboard shortcuts">
+          {shortcuts.map((shortcut) => (
+            <kbd>{shortcut}</kbd>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</article>
