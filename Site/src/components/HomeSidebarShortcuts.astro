@@ -1,0 +1,22 @@
+---
+const shortcuts = [
+  ["C", "Create issue"],
+  ["F", "Filters"],
+  ["S", "Sprints"],
+  ["I", "Inbox"],
+];
+---
+
+<section class="sidebar-section">
+  <p class="sidebar-label">Shortcuts</p>
+  <div class="shortcut-list">
+    {
+      shortcuts.map(([key, label]) => (
+        <span>
+          <kbd>{key}</kbd>
+          {label}
+        </span>
+      ))
+    }
+  </div>
+</section>

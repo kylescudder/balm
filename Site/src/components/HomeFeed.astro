@@ -1,0 +1,52 @@
+---
+import HomeFeatureEntry from "./HomeFeatureEntry.astro";
+
+const features = [
+  {
+    icon: "⌘",
+    kicker: "Keyboard-first workflow",
+    title: "Everything important is one key away.",
+    body: "Create, search, filter, transition, comment, and assign without digging through browser chrome.",
+    spotlight: true,
+    shortcuts: ["C", "F", "S", "I", "⌘K"],
+  },
+  {
+    icon: "▦",
+    kicker: "Board, list, and inbox",
+    title: "Move between the shapes of work without switching tools.",
+    body: "Scan a board, work a dense list, or catch up from an issue inbox built around the Jira work you already own, watch, and report.",
+  },
+  {
+    icon: "◇",
+    kicker: "Private by design",
+    title: "Your Jira data stays on your device and in Atlassian.",
+    body: "No analytics, no tracking, no hosted copy of your issues, comments, attachments, or projects.",
+  },
+  {
+    icon: "♬",
+    kicker: "Notifications, quietly",
+    title: "An inbox for the issues you watch, report, or own.",
+    body: "Read state follows you between your Mac and iPhone without a server reading your issues.",
+  },
+];
+---
+
+<div class="feed-column">
+  <div class="feed-header">
+    <p>Native Jira, without the tab hunt.</p>
+    <h1>A calmer work journal for the issues you actually need to move.</h1>
+  </div>
+
+  {
+    features.map((feature) => (
+      <HomeFeatureEntry
+        icon={feature.icon}
+        kicker={feature.kicker}
+        title={feature.title}
+        body={feature.body}
+        spotlight={feature.spotlight}
+        shortcuts={feature.shortcuts}
+      />
+    ))
+  }
+</div>
