@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import Observation
 import BalmModels
 import BalmAPI
@@ -417,9 +418,14 @@ public final class IssueDetailViewModel {
                         mimeType: image.mimeType ?? "image/png"
                     ))
                     details.attachments.append(contentsOf: raws.map(Self.mapAttachment))
+                    let pixelSize = Self.imagePixelSize(of: image.data)
                     for raw in raws {
                         if let url = raw.content, let id = await api.mediaFileID(forContentURL: url) {
-                            resolved.append(.image(mediaFileID: id))
+                            resolved.append(.image(
+                                mediaFileID: id,
+                                width: pixelSize?.width,
+                                height: pixelSize?.height
+                            ))
                         }
                     }
                 }
@@ -554,6 +560,20 @@ public final class IssueDetailViewModel {
             details.attachments.insert(snapshot, at: min(index, details.attachments.count))
             toaster?.error("Couldn't delete: \(error.localizedDescription)")
         }
+    }
+
+    /// Pixel dimensions read from the image header (no bitmap decode). EXIF
+    /// orientations 5–8 render rotated 90°, so width/height swap.
+    nonisolated private static func imagePixelSize(of data: Data) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Int,
+              let height = props[kCGImagePropertyPixelHeight] as? Int
+        else { return nil }
+        if let orientation = props[kCGImagePropertyOrientation] as? UInt32, orientation >= 5 {
+            return (height, width)
+        }
+        return (width, height)
     }
 
     nonisolated private static func mapAttachment(_ raw: RawJiraAttachment) -> JiraAttachmentMeta {

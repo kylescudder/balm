@@ -245,19 +245,24 @@ private func adfDoc(segments: [CommentSegment]) -> AnyJSON {
                     "text": .string("@\(display)")
                 ])
             ]))
-        case .image(let mediaFileID):
+        case .image(let mediaFileID, let width, let height):
             flushParagraph()
+            var attrs: [String: AnyJSON] = [
+                "type": .string("file"),
+                "id": .string(mediaFileID),
+                "collection": .string("")
+            ]
+            // Pixel dimensions drive the rendered size in Jira — omit them
+            // and the web UI shows a tiny placeholder until a manual resave.
+            if let width { attrs["width"] = .int(width) }
+            if let height { attrs["height"] = .int(height) }
             blocks.append(.object([
                 "type": .string("mediaSingle"),
                 "attrs": .object(["layout": .string("center")]),
                 "content": .array([
                     .object([
                         "type": .string("media"),
-                        "attrs": .object([
-                            "type": .string("file"),
-                            "id": .string(mediaFileID),
-                            "collection": .string("")
-                        ])
+                        "attrs": .object(attrs)
                     ])
                 ])
             ]))
