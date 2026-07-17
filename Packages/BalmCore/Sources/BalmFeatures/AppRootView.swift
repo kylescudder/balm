@@ -1,4 +1,5 @@
 import SwiftUI
+import BalmAuth
 import BalmDesignSystem
 
 public struct AppRootView: View {
@@ -27,6 +28,14 @@ public struct AppRootView: View {
             ToastOverlayView(toaster: env.toaster)
         }
         .animation(.spring(duration: 0.25), value: env.networkMonitor.isOnline)
+        // Posted by TokenStore when the rotating refresh token is rejected
+        // outright: the session can never recover, so land on the login
+        // screen instead of stranding the user on raw HTTP errors.
+        .onReceive(NotificationCenter.default.publisher(for: .balmSessionExpired)) { _ in
+            guard case .signedIn = env.authState else { return }
+            env.toaster.info("Your session has expired — please sign in again")
+            Task { await env.signOut() }
+        }
         .task {
             await env.bootstrap()
         }

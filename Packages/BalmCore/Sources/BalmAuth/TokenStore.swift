@@ -21,12 +21,22 @@ public protocol AuthRefresher: Sendable {
 
 extension AtlassianOAuth: AuthRefresher {}
 
+public extension Notification.Name {
+    /// Posted (once per dead session) when a token refresh is rejected
+    /// outright — the refresh token is permanently invalid and the app
+    /// should sign the user out rather than keep surfacing raw errors.
+    static let balmSessionExpired = Notification.Name("app.balm.sessionExpired")
+}
+
 /// Owns Keychain-backed auth state. Coalesces concurrent refreshes via a single-flight task.
 public actor TokenStore: TokenProvider {
     private let keychain: KeychainStore
     private let refresher: AuthRefresher
     private var cached: StoredAuth?
     private var inflightRefresh: Task<StoredAuth, Error>?
+    /// Guards against a burst of failing API calls posting `.balmSessionExpired`
+    /// repeatedly before the sign-out lands. Reset on save/sign-out.
+    private var announcedSessionExpiry = false
 
     public init(keychain: KeychainStore, refresher: AuthRefresher) {
         self.keychain = keychain
@@ -43,6 +53,7 @@ public actor TokenStore: TokenProvider {
     public func save(_ auth: StoredAuth) async throws {
         try keychain.save(auth)
         cached = auth
+        announcedSessionExpiry = false
     }
 
     public func signOut() async throws {
@@ -50,6 +61,7 @@ public actor TokenStore: TokenProvider {
         cached = nil
         inflightRefresh?.cancel()
         inflightRefresh = nil
+        announcedSessionExpiry = false
     }
 
     public func snapshot() async throws -> AuthSnapshot {
@@ -105,6 +117,12 @@ public actor TokenStore: TokenProvider {
             refreshed = try await task.value
         } catch {
             inflightRefresh = nil
+            if case AuthError.sessionExpired = error, !announcedSessionExpiry {
+                announcedSessionExpiry = true
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .balmSessionExpired, object: nil)
+                }
+            }
             throw error
         }
         inflightRefresh = nil
