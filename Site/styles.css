@@ -1,0 +1,240 @@
+/* Balm site — tokens lifted directly from BalmPalette.swift.
+   Warm paper + eucalyptus sage; system-native type, keycaps as the motif. */
+
+:root {
+  --background: #FAF6EE;
+  --foreground: #2C332E;
+  --card: #F2ECE0;
+  --muted-foreground: #6E756D;
+  --primary: #5E7A66;
+  --accent: #6E8A76;
+  --border: #E2DACB;
+  --clay: #B5705F;
+
+  --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #191B1A;
+    --foreground: #ECEAE0;
+    --card: #222423;
+    --muted-foreground: #969C96;
+    --primary: #8AA890;
+    --accent: #8AA890;
+    --border: #313431;
+    --clay: #CC8A78;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--primary);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+a:hover { color: var(--accent); }
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.wrap {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* Header shared by inner pages */
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.5rem 0 0;
+}
+.site-header img { width: 28px; height: 28px; }
+.site-header a {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+/* Hero */
+.hero {
+  text-align: center;
+  padding: 5.5rem 0 3.5rem;
+}
+.hero img { width: 84px; height: 84px; }
+.hero h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.6rem, 7vw, 3.4rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 1rem 0 0.75rem;
+}
+.hero .thesis {
+  font-size: 1.25rem;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+.hero .thesis em {
+  font-family: var(--serif);
+  color: var(--primary);
+}
+
+/* Install command */
+.install {
+  margin: 2.5rem auto 0;
+  max-width: 30rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  text-align: left;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.install .prompt { color: var(--muted-foreground); user-select: none; }
+
+/* Keycap row — the signature. Balm is one-key-per-action; show it. */
+.keys {
+  padding: 2.5rem 0 4rem;
+  text-align: center;
+}
+.keys h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+.keyrow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.75rem;
+  row-gap: 1.5rem;
+}
+.key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+kbd {
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  min-width: 3rem;
+  padding: 0.65rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-bottom-width: 3px;
+  border-radius: 9px;
+  transition: transform 120ms ease, border-bottom-width 120ms ease;
+}
+.key:hover kbd {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+}
+.key span {
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+
+/* Feature notes */
+.notes {
+  border-top: 1px solid var(--border);
+  padding: 3rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 2rem;
+}
+.notes h3 {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+.notes p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--muted-foreground);
+}
+
+/* Legal / prose pages */
+.prose { padding: 2.5rem 0 4rem; }
+.prose h1 {
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.25rem;
+}
+.prose .effective {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+}
+.prose h2 {
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 2.25rem 0 0.5rem;
+}
+.prose ul { padding-left: 1.25rem; }
+.prose li { margin-bottom: 0.4rem; }
+.prose .summary {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+}
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 1.75rem 0 2.5rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+footer .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  justify-content: center;
+}
+footer a { color: var(--muted-foreground); }

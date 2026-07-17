@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy policy — Balm</title>
+  <meta name="description" content="Balm's privacy policy: your Jira data moves between your device and Atlassian. Balm runs no servers that see or store it.">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="/balm-droplet.svg" type="image/svg+xml">
+</head>
+<body>
+
+  <header class="site-header wrap">
+    <img src="/balm-droplet.svg" alt="">
+    <a href="/">Balm</a>
+  </header>
+
+  <main class="prose wrap">
+    <h1>Privacy policy</h1>
+    <p class="effective">Effective 17 July 2026</p>
+
+    <div class="summary">
+      <strong>The short version:</strong> your Jira data moves directly between your device and Atlassian.
+      Balm runs no servers that see, store, or analyse it, and collects no analytics of any kind.
+    </div>
+
+    <h2>What Balm is</h2>
+    <p>Balm is a native macOS and iOS client for Jira Cloud, developed by Kyle Scudder. You sign in with your own Atlassian account using OAuth 2.0; Balm then reads and writes your Jira data on your behalf, from your device.</p>
+
+    <h2>Data on your device</h2>
+    <ul>
+      <li><strong>Sign-in tokens</strong> are stored in the system Keychain on your device, and nowhere else.</li>
+      <li><strong>App data</strong> — your preferences, saved filters, and the notification inbox (issue keys, summaries, and who did what) — is cached in the app's local storage so the app works quickly and offline.</li>
+      <li><strong>System notifications</strong>, if you enable them, are generated on your device. Nothing is pushed to it from a server.</li>
+    </ul>
+
+    <h2>Data in your Atlassian account</h2>
+    <p>To keep read/unread state consistent between your devices, Balm saves a small record (the ids of notifications you've read) as a hidden property on your own Atlassian user account. It is visible to no other user, and revoking Balm's access severs the app from it.</p>
+
+    <h2>The sign-in service</h2>
+    <p>One small service, <code>auth.balm.kylescudder.co.uk</code>, exists because Atlassian requires the app's client secret when exchanging sign-in codes for tokens, and a secret cannot ship inside an app. During sign-in and token refresh, this service relays your authorization code or refresh token to Atlassian and returns the result to your device. It processes these values in transit only: it has no database, stores nothing, and logs no token contents.</p>
+
+    <h2>What Balm never does</h2>
+    <ul>
+      <li>No analytics, telemetry, or crash reporting.</li>
+      <li>No advertising or tracking of any kind.</li>
+      <li>No selling or sharing of data — there is no data to sell.</li>
+      <li>No third-party services beyond Atlassian itself.</li>
+    </ul>
+
+    <h2>Your controls</h2>
+    <ul>
+      <li><strong>Sign out</strong> in Balm's settings to remove tokens and cached data from the device.</li>
+      <li><strong>Revoke Balm's access</strong> entirely at <a href="https://id.atlassian.com/manage-profile/apps">id.atlassian.com → Connected apps</a>.</li>
+      <li><strong>Delete the app</strong> to remove everything it stored locally.</li>
+    </ul>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted here with a new effective date. The policy will never change to permit collection this version rules out without a clear notice.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about privacy? See <a href="/support">support</a>.</p>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/kylescudder/balm">GitHub</a>
+      <span>© 2026 Kyle Scudder</span>
+    </div>
+  </footer>
+
+</body>
+</html>
