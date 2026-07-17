@@ -4,14 +4,13 @@ import BaseLayout from "./BaseLayout.astro";
 interface Props {
   title: string;
   description: string;
-  current: "privacy" | "terms" | "support";
   policy?: boolean;
 }
 
-const { title, description, current, policy = false } = Astro.props;
+const { title, description, policy = false } = Astro.props;
 ---
 
-<BaseLayout title={title} description={description} current={current}>
+<BaseLayout title={title} description={description}>
   <main class:list={["prose", { "legal-policy": policy }, "wrap"]}>
     <slot />
   </main>
