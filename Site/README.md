@@ -2,15 +2,42 @@
 
 Static site for balm.kylescudder.co.uk — landing page plus the privacy,
 terms, and support pages Atlassian's app distribution form requires.
-No build step, no JavaScript, no external assets.
+Built with Astro. The generated site is static and ships no client-side
+JavaScript.
+
+## Local preview
+
+Install dependencies once:
+
+```sh
+cd Site
+bun install
+```
+
+Run the development server:
+
+```sh
+bun run dev
+```
+
+Then open `http://localhost:4321/`.
+
+## Build
+
+```sh
+bun run build
+```
+
+The deployable files are written to `dist/`.
 
 ## Hosting with Caddy
 
-1. Copy the contents of this directory to the server, e.g. `/var/www/balm`.
-2. Merge `Caddyfile` into your Caddy config (adjust domain/root if needed).
-3. Reload Caddy: `caddy reload` (or `systemctl reload caddy`).
+1. Run `bun run build`.
+2. Copy the contents of `dist/` to the server, e.g. `/var/www/balm`.
+3. Merge `Caddyfile` into your Caddy config (adjust domain/root if needed).
+4. Reload Caddy: `caddy reload` (or `systemctl reload caddy`).
 
-`try_files {path} {path}.html` gives the clean URLs below.
+`try_files {path} {path}/index.html {path}.html` gives the clean URLs below.
 
 ## URLs for the Atlassian developer console
 

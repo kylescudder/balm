@@ -1,0 +1,29 @@
+---
+import "../styles.css";
+import Footer from "../components/Footer.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  current?: "home" | "privacy" | "terms" | "support";
+}
+
+const { title, description, current = "home" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title}</title>
+    <meta name="description" content={description}>
+    <link rel="icon" href="/balm-droplet.svg" type="image/svg+xml">
+  </head>
+  <body>
+    <SiteHeader current={current} />
+    <slot />
+    <Footer />
+  </body>
+</html>
