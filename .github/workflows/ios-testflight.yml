@@ -1,0 +1,163 @@
+name: iOS · TestFlight
+
+# Builds the iOS app, archives it, and uploads to TestFlight via
+# App Store Connect API. See docs/ci-testflight.md for the one-time
+# secrets setup.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'App/**'
+      - 'Packages/BalmCore/**'
+      - 'project.yml'
+      - 'Scripts/ci/**'
+      - '.github/workflows/ios-testflight.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: balm-ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Archive & upload
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      SCHEME: Balm
+      ARCHIVE_PATH: build/Balm.xcarchive
+      EXPORT_PATH: build/ipa
+      EXPORT_OPTIONS: Scripts/ci/ExportOptions.plist
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+      APP_STORE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      IOS_BALM_PROFILE_BASE64: ${{ secrets.IOS_BALM_PROFILE_BASE64 }}
+      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install iOS platform (if missing)
+        run: sudo xcodebuild -downloadPlatform iOS || true
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Write App Store Connect API key
+        env:
+          API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          if [ -z "${API_KEY_P8}" ] || [ -z "${APP_STORE_KEY_ID}" ] || [ -z "${APP_STORE_ISSUER_ID}" ]; then
+            echo "::error::APP_STORE_CONNECT_API_KEY_P8 / _KEY_ID / _ISSUER_ID secret(s) missing"
+            exit 1
+          fi
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$API_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_KEY_ID}.p8"
+          chmod 600 "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_KEY_ID}.p8"
+
+      - name: Install signing certificate and profile
+        run: |
+          test -n "${IOS_DISTRIBUTION_CERTIFICATE_BASE64}" || (echo "::error::IOS_DISTRIBUTION_CERTIFICATE_BASE64 is empty" && exit 1)
+          test -n "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD}" || (echo "::error::IOS_DISTRIBUTION_CERTIFICATE_PASSWORD is empty" && exit 1)
+          test -n "${IOS_BALM_PROFILE_BASE64}" || (echo "::error::IOS_BALM_PROFILE_BASE64 is empty" && exit 1)
+          test -n "${IOS_KEYCHAIN_PASSWORD}" || (echo "::error::IOS_KEYCHAIN_PASSWORD is empty" && exit 1)
+
+          certificate_path="$RUNNER_TEMP/balm-distribution.p12"
+          keychain_path="$RUNNER_TEMP/balm-signing.keychain-db"
+          profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+
+          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$IOS_KEYCHAIN_PASSWORD" "$keychain_path"
+
+          mkdir -p "$profiles_dir"
+          profile_path="$RUNNER_TEMP/Balm_App_Store.mobileprovision"
+          profile_plist="$RUNNER_TEMP/Balm_App_Store.plist"
+
+          printf '%s' "$IOS_BALM_PROFILE_BASE64" | base64 --decode > "$profile_path"
+          security cms -D -i "$profile_path" > "$profile_plist"
+
+          profile_name=$(/usr/libexec/PlistBuddy -c "Print :Name" "$profile_plist")
+          profile_uuid=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$profile_plist")
+
+          if [ "$profile_name" != "Balm App Store" ]; then
+            echo "::error::Expected provisioning profile 'Balm App Store' but secret contains '$profile_name'"
+            exit 1
+          fi
+
+          cp "$profile_path" "$profiles_dir/$profile_uuid.mobileprovision"
+          echo "Installed provisioning profile '$profile_name' as $profile_uuid.mobileprovision"
+
+      - name: Set CURRENT_PROJECT_VERSION to run number
+        run: |
+          perl -0pi -e 's/CURRENT_PROJECT_VERSION: "?[0-9]+"?/CURRENT_PROJECT_VERSION: "${{ github.run_number }}"/' project.yml
+
+      - name: Set DEVELOPMENT_TEAM
+        if: env.APP_STORE_TEAM_ID != ''
+        run: |
+          perl -0pi -e 's/DEVELOPMENT_TEAM: ".*?"/DEVELOPMENT_TEAM: "${{ env.APP_STORE_TEAM_ID }}"/' project.yml
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Balm.xcodeproj \
+            -scheme "$SCHEME"
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Balm.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="Balm App Store"
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist "$EXPORT_OPTIONS"
+
+      - name: Upload to TestFlight
+        run: |
+          IPA=$(ls "$EXPORT_PATH"/*.ipa | head -1)
+          if [ -z "$IPA" ]; then
+            echo "::error::No .ipa produced by export"
+            exit 1
+          fi
+          xcrun altool --upload-app \
+            --file "$IPA" \
+            --type ios \
+            --apiKey "$APP_STORE_KEY_ID" \
+            --apiIssuer "$APP_STORE_ISSUER_ID"
+
+      - name: Upload archive as artifact (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Balm-failed-archive
+          path: ${{ env.ARCHIVE_PATH }}
+          retention-days: 7
