@@ -2,7 +2,7 @@
 import "../styles.css";
 import DocumentHead from "../components/DocumentHead.astro";
 import Footer from "../components/Footer.astro";
-import SiteHeader from "../components/SiteHeader.astro";
+import Header from "../components/Header.astro";
 
 interface Props {
   title: string;
@@ -17,7 +17,7 @@ const { title, description, current = "home" } = Astro.props;
 <html lang="en">
   <DocumentHead title={title} description={description} />
   <body>
-    <SiteHeader current={current} />
+    <Header current={current} />
     <slot />
     <Footer />
   </body>
