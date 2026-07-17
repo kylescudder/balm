@@ -30,15 +30,17 @@ bun run build
 
 The deployable files are written to `dist/`.
 
-## Hosting with Caddy
+## Netlify
 
-1. Run `bun run build`.
-2. Copy the contents of `dist/` to the server, e.g. `/var/www/balm`.
-3. Merge `Caddyfile` into your Caddy config (adjust domain/root if needed).
-4. Reload Caddy: `caddy reload` (or `systemctl reload caddy`).
+Use the repository root package and the checked-in `netlify.toml`:
 
-`try_files {path} {path}/index.html {path}.html` gives the clean URLs below.
-
+```text
+Base directory:      leave blank
+Package directory:   leave blank
+Build command:       bun run build
+Publish directory:   Site/dist
+Functions directory: leave blank
+```
 ## URLs for the Atlassian developer console
 
 | Field | URL |
