@@ -40,7 +40,10 @@ public extension Array where Element == CommentInline {
 public enum CommentSegment: Sendable, Hashable {
     case text(String)
     case mention(accountId: String, display: String)
-    case image(mediaFileID: String)
+    /// `width`/`height` are the image's pixel dimensions. Jira's renderer
+    /// sizes the media node from these attrs — without them it falls back to
+    /// a tiny placeholder until the web editor re-measures on a resave.
+    case image(mediaFileID: String, width: Int?, height: Int?)
 }
 
 public extension Array where Element == CommentSegment {
