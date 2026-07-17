@@ -1,11 +1,11 @@
 import Foundation
 import AuthenticationServices
 
-/// Wraps `ASWebAuthenticationSession` for Atlassian 3LO with PKCE.
+/// Wraps `ASWebAuthenticationSession` for Atlassian 3LO.
 ///
 /// Token exchange and refresh are routed through the Balm BFF — Atlassian's
-/// `/oauth/token` requires `client_secret` even with PKCE, so the secret stays
-/// on the server. The BFF returns the access/refresh tokens plus the resolved
+/// `/oauth/token` requires `client_secret`, so the secret stays on the server.
+/// The BFF returns the access/refresh tokens plus the resolved
 /// `cloudId`, `siteName`, and `siteURL` for the first accessible Jira site.
 public final class AtlassianOAuth: NSObject, Sendable {
     private let config: OAuthConfig
@@ -18,13 +18,12 @@ public final class AtlassianOAuth: NSObject, Sendable {
 
     @MainActor
     public func start(presentationAnchor: ASPresentationAnchor) async throws -> StoredAuth {
-        let pkce = PKCEGenerator.make()
         let state = UUID().uuidString
-        let authURL = try buildAuthorizationURL(state: state, challenge: pkce.challenge)
+        let authURL = try buildAuthorizationURL(state: state)
 
         let callbackURL = try await runWebAuth(url: authURL, anchor: presentationAnchor)
         let code = try extractCode(from: callbackURL, expectedState: state)
-        return try await exchangeCode(code, verifier: pkce.verifier)
+        return try await exchangeCode(code)
     }
 
     public func refresh(refreshToken: String) async throws -> TokenResponse {
@@ -44,7 +43,7 @@ public final class AtlassianOAuth: NSObject, Sendable {
 
     // MARK: - Internals
 
-    private func buildAuthorizationURL(state: String, challenge: String) throws -> URL {
+    private func buildAuthorizationURL(state: String) throws -> URL {
         var components = URLComponents(url: config.authorizationEndpoint, resolvingAgainstBaseURL: false)
         components?.queryItems = [
             URLQueryItem(name: "audience", value: config.audience),
@@ -53,9 +52,7 @@ public final class AtlassianOAuth: NSObject, Sendable {
             URLQueryItem(name: "redirect_uri", value: config.redirectURI.absoluteString),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "prompt", value: "consent"),
-            URLQueryItem(name: "code_challenge", value: challenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256")
+            URLQueryItem(name: "prompt", value: "consent")
         ]
         guard let url = components?.url else { throw AuthError.configurationMissing("authorize URL") }
         return url
@@ -127,10 +124,9 @@ public final class AtlassianOAuth: NSObject, Sendable {
         return code
     }
 
-    private func exchangeCode(_ code: String, verifier: String) async throws -> StoredAuth {
+    private func exchangeCode(_ code: String) async throws -> StoredAuth {
         let payload: [String: String] = [
             "code": code,
-            "code_verifier": verifier,
             "redirect_uri": config.redirectURI.absoluteString
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
