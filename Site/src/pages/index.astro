@@ -1,11 +1,17 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import HomePage from "../components/HomePage.astro";
+import HomeFeed from "../components/HomeFeed.astro";
+import HomeSidebar from "../components/HomeSidebar.astro";
 ---
 
 <BaseLayout
   title="Balm - a native, keyboard-driven Jira client"
   description="Balm is a native, keyboard-driven Jira Cloud client for macOS and iOS. Calm, fast, and one key away."
 >
-  <HomePage />
+  <main class="app-page">
+    <section class="product-layout">
+      <HomeFeed />
+      <HomeSidebar />
+    </section>
+  </main>
 </BaseLayout>
