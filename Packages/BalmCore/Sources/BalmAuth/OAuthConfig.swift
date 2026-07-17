@@ -79,6 +79,13 @@ public struct OAuthConfig: Sendable, Equatable {
                 "read:group:jira",
                 "read:application-role:jira",
                 "read:attachment:jira",
+                // Cross-device inbox read-state sync (`InboxStore`/`InboxReadState`)
+                // — per-user Jira user property storage. Must also be enabled on
+                // the OAuth app in the developer console; existing sessions keep
+                // working with sync silently disabled (`readSyncUnavailable`)
+                // until the user re-authenticates and grants it.
+                "read:user.property:jira",
+                "write:user.property:jira",
                 // Jira platform — write / delete
                 "write:issue:jira",
                 "write:issue.property:jira",

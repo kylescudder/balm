@@ -36,7 +36,7 @@ public struct SettingsView: View {
     private var container: some View {
         #if os(macOS)
         TabView {
-            Form { projectSection }.formStyle(.grouped)
+            Form { projectSection; notificationsSection }.formStyle(.grouped)
                 .tabItem { Label("General", systemImage: "gearshape") }
             Form { siteSection; networkSection; signOutSection }.formStyle(.grouped)
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
@@ -51,6 +51,7 @@ public struct SettingsView: View {
         NavigationStack {
             Form {
                 projectSection
+                notificationsSection
                 siteSection
                 networkSection
                 signOutSection
@@ -89,6 +90,52 @@ public struct SettingsView: View {
             }
             Button("Change Project…") { showingProjectChooser = true }
         }
+    }
+
+    @ViewBuilder
+    private var notificationsSection: some View {
+        Section {
+            Toggle("System notifications", isOn: systemNotificationsBinding)
+            Picker("Check every", selection: pollIntervalBinding) {
+                ForEach(InboxStore.allowedPollIntervals, id: \.self) { seconds in
+                    Text(pollIntervalLabel(seconds)).tag(seconds)
+                }
+            }
+        } header: {
+            Text("Notifications")
+        } footer: {
+            Text(notificationsFooterText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var notificationsFooterText: String {
+        var text = "Notifications are synthesized by periodically polling Jira — they cover issues "
+            + "you're assigned, reported, or watching (mentions only within those issues)."
+        if env.inboxStore.readSyncUnavailable {
+            text += "\n\nRead state isn't syncing across devices — sign out and back in to grant the new permission."
+        }
+        return text
+    }
+
+    private var systemNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: { env.inboxStore.systemNotificationsEnabled },
+            set: { env.inboxStore.systemNotificationsEnabled = $0 }
+        )
+    }
+
+    private var pollIntervalBinding: Binding<Int> {
+        Binding(
+            get: { env.inboxStore.pollIntervalSeconds },
+            set: { env.inboxStore.pollIntervalSeconds = $0 }
+        )
+    }
+
+    private func pollIntervalLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        return minutes == 1 ? "1 minute" : "\(minutes) minutes"
     }
 
     @ViewBuilder
