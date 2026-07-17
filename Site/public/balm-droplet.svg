@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Balm droplet</title>
+  <desc id="desc">A rounded green droplet mark for Balm.</desc>
+  <defs>
+    <linearGradient id="g" x1="52" x2="203" y1="213" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5E7A66"/>
+      <stop offset="1" stop-color="#9DB89D"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#g)" d="M128 19c29 42 75 87 75 145 0 42-33 74-75 74s-75-32-75-74c0-58 46-103 75-145Z"/>
+  <path fill="#FAF6EE" fill-opacity=".35" d="M91 158c0-35 22-63 47-93-6 40-35 60-35 95 0 22 12 41 31 51-26-3-43-24-43-53Z"/>
+</svg>
