@@ -10,8 +10,7 @@ JavaScript.
 Install dependencies once:
 
 ```sh
-cd Site
-bun install
+bun install --cwd Site
 ```
 
 Run the development server:
@@ -32,7 +31,9 @@ The deployable files are written to `dist/`.
 
 ## Netlify
 
-Use the repository root package and the checked-in `netlify.toml`:
+The `Site/` directory owns the Astro package. The repository root only
+delegates commands into it, so Netlify should still use the root package and
+the checked-in `netlify.toml`:
 
 ```text
 Base directory:      leave blank
