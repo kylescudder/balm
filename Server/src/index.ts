@@ -69,7 +69,8 @@ app.post('/api/auth/native/exchange', async (c) => {
       client_id: secrets.clientId,
       client_secret: secrets.clientSecret,
       code,
-      redirect_uri
+      redirect_uri,
+      audience: 'api.atlassian.com'
     })
   })
   if (!tokenRes.ok) {
