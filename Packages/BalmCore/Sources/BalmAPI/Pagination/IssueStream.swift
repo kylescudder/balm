@@ -64,7 +64,11 @@ public extension JiraClient {
                     }
                 } while token != nil && !Task.isCancelled
 
-                continuation.finish()
+                if Task.isCancelled {
+                    continuation.finish(throwing: CancellationError())
+                } else {
+                    continuation.finish()
+                }
             }
             continuation.onTermination = { _ in task.cancel() }
         }

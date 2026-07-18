@@ -7,7 +7,13 @@ enum IssueListRefreshPolicy {
         fresh: [JiraIssue],
         isUserVisibleRefresh: Bool
     ) -> [JiraIssue] {
-        if !isUserVisibleRefresh, !current.isEmpty, fresh.isEmpty {
+        guard !isUserVisibleRefresh, !current.isEmpty else { return fresh }
+        if fresh.isEmpty {
+            return current
+        }
+        let currentKeys = Set(current.map(\.key))
+        let freshKeys = Set(fresh.map(\.key))
+        if fresh.count < current.count, freshKeys.isSubset(of: currentKeys) {
             return current
         }
         return fresh
