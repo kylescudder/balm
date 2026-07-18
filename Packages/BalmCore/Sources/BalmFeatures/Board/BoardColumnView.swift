@@ -18,22 +18,8 @@ struct BoardColumnView: View {
             ScrollView {
                 LazyVStack(spacing: theme.spacing.s) {
                     ForEach(column.issues, id: \.self) { issue in
-                        #if os(macOS)
-                        NavigationLink(value: issue) {
-                            IssueCardView(issue: issue)
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded { selection = issue })
-                        #else
-                        Button {
-                            selection = issue
-                            openIssue(issue)
-                        } label: {
-                            IssueCardView(issue: issue)
-                        }
-                        .buttonStyle(.plain)
-                        #endif
-                        .draggable(issue.key)
+                        issueCard(issue)
+                            .draggable(issue.key)
                     }
                     if column.issues.isEmpty {
                         Text("No issues")
@@ -61,6 +47,25 @@ struct BoardColumnView: View {
         } isTargeted: { targeted in
             isTargeted = targeted
         }
+    }
+
+    @ViewBuilder
+    private func issueCard(_ issue: JiraIssue) -> some View {
+        #if os(macOS)
+        NavigationLink(value: issue) {
+            IssueCardView(issue: issue)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { selection = issue })
+        #else
+        Button {
+            selection = issue
+            openIssue(issue)
+        } label: {
+            IssueCardView(issue: issue)
+        }
+        .buttonStyle(.plain)
+        #endif
     }
 
     private var header: some View {
