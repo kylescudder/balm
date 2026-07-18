@@ -214,10 +214,12 @@ public final class IssueListViewModel {
             loadState = .loading
         }
         guard !names.isEmpty else {
-            issues = []
-            filterOptions = .empty
-            filterOptionsSprints = nil
-            loadState = .loaded
+            if showLoading || issues.isEmpty {
+                issues = []
+                filterOptions = .empty
+                filterOptionsSprints = nil
+                loadState = .loaded
+            }
             return
         }
         // A restored component or instance filter needs its resolved JQL field
@@ -234,9 +236,14 @@ public final class IssueListViewModel {
                 componentField: componentFieldJQL,
                 instanceField: projectInstanceFieldID
             )
-            issues = fresh
+            let next = IssueListRefreshPolicy.replacementIssues(
+                current: issues,
+                fresh: fresh,
+                isUserVisibleRefresh: showLoading
+            )
+            issues = next
             issueCache.store(
-                fresh,
+                next,
                 for: IssueListCacheKey(projectID: project.id, sprintNames: names, definition: userDefinition)
             )
             loadState = .loaded
