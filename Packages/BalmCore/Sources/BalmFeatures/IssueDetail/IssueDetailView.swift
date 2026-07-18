@@ -207,7 +207,7 @@ public struct IssueDetailView: View {
                 Button {
                     editingDescription = true
                 } label: {
-                    Label("Edit Description", systemImage: "pencil")
+                    Text("Edit Description")
                 }
             }
             #else
@@ -218,7 +218,7 @@ public struct IssueDetailView: View {
                     Button {
                         editingDescription = true
                     } label: {
-                        Label("Edit", systemImage: "pencil")
+                        Text("Edit")
                     }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
