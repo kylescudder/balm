@@ -27,7 +27,24 @@ final class IssueListRefreshPolicyTests: XCTestCase {
         XCTAssertEqual(result, [])
     }
 
-    func testPassiveBackgroundRefreshAppliesNonEmptyResult() {
+    func testPassiveBackgroundRefreshDoesNotReplaceVisibleIssuesWithStrictSubset() {
+        let existing = [
+            Self.issue(key: "MPRO5-1"),
+            Self.issue(key: "MPRO5-2"),
+            Self.issue(key: "MPRO5-3")
+        ]
+        let partial = [Self.issue(key: "MPRO5-1")]
+
+        let result = IssueListRefreshPolicy.replacementIssues(
+            current: existing,
+            fresh: partial,
+            isUserVisibleRefresh: false
+        )
+
+        XCTAssertEqual(result, existing)
+    }
+
+    func testPassiveBackgroundRefreshAppliesChangedNonSubsetResult() {
         let existing = [Self.issue(key: "MPRO5-1")]
         let fresh = [Self.issue(key: "MPRO5-2")]
 

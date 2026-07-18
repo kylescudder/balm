@@ -235,6 +235,7 @@ public final class IssueListViewModel {
                 componentField: componentFieldJQL,
                 instanceField: projectInstanceFieldID
             )
+            try Task.checkCancellation()
             let next = IssueListRefreshPolicy.replacementIssues(
                 current: issues,
                 fresh: fresh,
