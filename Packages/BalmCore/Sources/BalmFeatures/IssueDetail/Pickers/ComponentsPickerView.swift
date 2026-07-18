@@ -1,7 +1,5 @@
 import SwiftUI
 import BalmModels
-import BalmAPI
-import BalmDesignSystem
 
 /// One selectable option for the create modal's component field, addressed by
 /// the Jira option `id` (submitted) with a human `label` (displayed/filtered).
@@ -10,21 +8,17 @@ struct ComponentOption: Hashable, Identifiable {
     let label: String
 }
 
-/// Keyboard-filterable picker for the New Issue "Component" field. Options are
-/// supplied by the caller from create metadata, so it works for both the
-/// standard `components` field and tenant custom selects (e.g.
-/// `customfield_10312`). Single-select fields select-and-dismiss; multi-select
-/// fields toggle membership and confirm with Apply.
+/// Native component picker for single- and multi-select Jira component fields.
 struct ComponentsPickerView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.balmTheme) private var theme
 
     let title: String
     let options: [ComponentOption]
     let allowsMultiple: Bool
     let onApply: ([ComponentOption]) -> Void
 
-    @State private var draft: Set<String>   // selected option ids
+    @State private var draft: Set<String>
+    @State private var searchText = ""
 
     init(
         title: String,
@@ -43,26 +37,36 @@ struct ComponentsPickerView: View {
     var body: some View {
         PickerScaffold(
             title: title,
-            confirmTitle: "Apply",
+            confirmTitle: allowsMultiple ? "Apply" : nil,
             onConfirm: { onApply(options.filter { draft.contains($0.id) }) }
         ) {
-            KeyboardFilterList(
-                items: options,
-                prompt: "Filter \(title.lowercased())",
-                emptyText: "No \(title.lowercased()) defined for this project.",
-                filterText: { $0.label },
-                onActivate: { activate($0) }
-            ) { option in
-                HStack {
-                    Text(option.label).foregroundStyle(theme.palette.foreground)
-                    Spacer()
-                    if draft.contains(option.id) {
-                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
+            List {
+                if filteredOptions.isEmpty {
+                    ContentUnavailableView("No \(title.lowercased())", systemImage: "shippingbox")
+                } else {
+                    ForEach(filteredOptions) { option in
+                        Button {
+                            activate(option)
+                        } label: {
+                            HStack {
+                                Text(option.label)
+                                Spacer()
+                                if draft.contains(option.id) {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
                     }
                 }
-                .contentShape(Rectangle())
             }
+            .searchable(text: $searchText, prompt: "Search \(title.lowercased())")
         }
+    }
+
+    private var filteredOptions: [ComponentOption] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return options }
+        return options.filter { $0.label.localizedStandardContains(query) }
     }
 
     private func activate(_ option: ComponentOption) {

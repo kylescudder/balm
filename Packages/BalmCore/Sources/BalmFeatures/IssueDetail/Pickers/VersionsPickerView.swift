@@ -15,6 +15,7 @@ struct VersionsPickerView: View {
     @State private var available: [JiraVersion] = []
     @State private var draftIDs: Set<String>
     @State private var isLoading = false
+    @State private var searchText = ""
 
     init(projectKey: String, current: [JiraVersion], onApply: @escaping ([JiraVersion]) -> Void) {
         self.projectKey = projectKey
@@ -29,31 +30,48 @@ struct VersionsPickerView: View {
             confirmTitle: "Apply",
             onConfirm: { onApply(available.filter { draftIDs.contains($0.id) }) }
         ) {
-            KeyboardFilterList(
-                items: available,
-                prompt: "Filter versions",
-                isLoading: isLoading,
-                emptyText: "No releases defined for this project.",
-                filterText: { $0.name },
-                onActivate: { toggle($0.id) }
-            ) { version in
-                HStack {
-                    Text(version.name).foregroundStyle(theme.palette.foreground)
-                    Spacer()
-                    if version.released {
-                        BalmChip("Released", tint: theme.palette.color(for: .chart5))
-                    }
-                    if version.archived {
-                        BalmChip("Archived", tint: theme.palette.mutedForeground)
-                    }
-                    if draftIDs.contains(version.id) {
-                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
+            List {
+                if isLoading {
+                    ProgressView()
+                } else if filteredVersions.isEmpty {
+                    ContentUnavailableView("No fix versions", systemImage: "tag")
+                } else {
+                    ForEach(filteredVersions, id: \.id) { version in
+                        Button { toggle(version.id) } label: {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(version.name)
+                                    if version.released || version.archived {
+                                        Text(versionState(version))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if draftIDs.contains(version.id) {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(theme.palette.primary)
+                                }
+                            }
+                        }
                     }
                 }
-                .contentShape(Rectangle())
             }
+            .searchable(text: $searchText, prompt: "Search versions")
             .task { await load() }
         }
+    }
+
+    private var filteredVersions: [JiraVersion] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return available }
+        return available.filter { $0.name.localizedStandardContains(query) }
+    }
+
+    private func versionState(_ version: JiraVersion) -> String {
+        [version.released ? "Released" : nil, version.archived ? "Archived" : nil]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 
     private func toggle(_ id: String) {
