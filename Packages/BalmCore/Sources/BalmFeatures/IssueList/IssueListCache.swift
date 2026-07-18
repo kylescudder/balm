@@ -31,3 +31,24 @@ struct IssueListCache: Sendable {
         }
     }
 }
+
+@MainActor
+enum SharedIssueListCache {
+    private static var cache = IssueListCache()
+
+    static func issues(for key: IssueListCacheKey) -> [JiraIssue]? {
+        cache.issues(for: key)
+    }
+
+    static func store(_ issues: [JiraIssue], for key: IssueListCacheKey) {
+        cache.store(issues, for: key)
+    }
+
+    static func update(_ issue: JiraIssue) {
+        cache.update(issue)
+    }
+
+    static func reset() {
+        cache = IssueListCache()
+    }
+}
