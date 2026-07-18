@@ -77,6 +77,11 @@ let package = Package(
             name: "BalmADFTests",
             dependencies: ["BalmADF"],
             swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "BalmFeaturesTests",
+            dependencies: ["BalmFeatures"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
         )
     ]
 )
