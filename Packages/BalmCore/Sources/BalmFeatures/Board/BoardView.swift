@@ -6,15 +6,18 @@ public struct BoardView: View {
     @Environment(\.balmTheme) private var theme
     let columns: [BoardColumn]
     @Binding var selection: JiraIssue?
+    var onColumnViewed: (() -> Void)?
     var onMove: ((String, BoardColumn) -> Void)?
 
     public init(
         columns: [BoardColumn],
         selection: Binding<JiraIssue?>,
+        onColumnViewed: (() -> Void)? = nil,
         onMove: ((String, BoardColumn) -> Void)? = nil
     ) {
         self.columns = columns
         self._selection = selection
+        self.onColumnViewed = onColumnViewed
         self.onMove = onMove
     }
 
@@ -61,6 +64,7 @@ public struct BoardView: View {
                     BoardColumnView(column: column, selection: $selection, onMove: onMove)
                         .padding(theme.spacing.s)
                         .tag(column.id)
+                        .onAppear { onColumnViewed?() }
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .always))

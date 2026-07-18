@@ -355,7 +355,11 @@ public struct IssueListView: View {
         case .list:
             listBody
         case .board:
-            BoardView(columns: filteredColumns, selection: $selection) { key, column in
+            BoardView(
+                columns: filteredColumns,
+                selection: $selection,
+                onColumnViewed: { model.refreshInBackground() }
+            ) { key, column in
                 Task { await model.moveIssue(key: key, to: column) }
             }
         }
@@ -367,6 +371,10 @@ public struct IssueListView: View {
                 NavigationLink(value: issue) {
                     IssueRowView(issue: issue)
                 }
+                .simultaneousGesture(TapGesture().onEnded {
+                    selection = issue
+                    model.refreshInBackground()
+                })
                 .tag(issue)
             }
         }

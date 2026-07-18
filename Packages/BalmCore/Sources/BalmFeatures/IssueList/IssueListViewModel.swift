@@ -87,6 +87,7 @@ public final class IssueListViewModel {
     private let api: JiraClient
     private let toaster: Toaster?
     private var loadTask: Task<Void, Never>?
+    private var issueCache = IssueListCache()
 
     public init(project: JiraProject, api: JiraClient, toaster: Toaster? = nil) {
         self.project = project
@@ -175,9 +176,24 @@ public final class IssueListViewModel {
     }
 
     public func reload() {
+        let names = selectedSprintNames
+        let key = IssueListCacheKey(projectID: project.id, sprintNames: names, definition: userDefinition)
+        if let cached = issueCache.issues(for: key) {
+            issues = cached
+            loadState = .loaded
+            refreshInBackground()
+            return
+        }
         loadTask?.cancel()
         loadTask = Task { [weak self] in
-            await self?.performLoad()
+            await self?.performLoad(showLoading: true)
+        }
+    }
+
+    public func refreshInBackground() {
+        loadTask?.cancel()
+        loadTask = Task { [weak self] in
+            await self?.performLoad(showLoading: false)
         }
     }
 
@@ -186,17 +202,17 @@ public final class IssueListViewModel {
     public func reloadAwaiting() async {
         loadTask?.cancel()
         let task: Task<Void, Never> = Task { [weak self] in
-            await self?.performLoad()
+            await self?.performLoad(showLoading: true)
         }
         loadTask = task
         await task.value
     }
 
-    private func performLoad() async {
-        loadState = .loading
-        let names = availableSprints
-            .filter { selectedSprintIDs.contains($0.name) || selectedSprintIDs.contains($0.id) }
-            .map(\.name)
+    private func performLoad(showLoading: Bool) async {
+        let names = selectedSprintNames
+        if showLoading || issues.isEmpty {
+            loadState = .loading
+        }
         guard !names.isEmpty else {
             issues = []
             filterOptions = .empty
@@ -211,18 +227,27 @@ public final class IssueListViewModel {
             await loadProjectMetadataIfNeeded()
         }
         do {
-            issues = try await api.issues(
+            let fresh = try await api.issues(
                 projectKey: project.key,
                 sprints: names,
                 definition: userDefinition,
                 componentField: componentFieldJQL,
                 instanceField: projectInstanceFieldID
             )
+            issues = fresh
+            issueCache.store(
+                fresh,
+                for: IssueListCacheKey(projectID: project.id, sprintNames: names, definition: userDefinition)
+            )
             loadState = .loaded
         } catch is CancellationError {
             return
         } catch {
-            loadState = .failed(error.localizedDescription)
+            if showLoading || issues.isEmpty {
+                loadState = .failed(error.localizedDescription)
+            } else {
+                toaster?.error("Couldn't refresh issues: \(error.localizedDescription)")
+            }
             return
         }
         await updateFilterOptions(sprintNames: names)
@@ -373,6 +398,7 @@ public final class IssueListViewModel {
         if let index = issues.firstIndex(where: { $0.key == issue.key }) {
             issues[index] = issue
         }
+        issueCache.update(issue)
     }
 
     // MARK: - Drag & drop
