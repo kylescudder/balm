@@ -25,6 +25,7 @@ public struct IssueListView: View {
     @Environment(\.openIssue) private var openIssueAction
 
     @Binding private var selection: JiraIssue?
+    private let onOpenSettings: (() -> Void)?
     @State private var model: IssueListViewModel
     @State private var filterStore: FilterStore
     @State private var savedFiltersStore: SavedFiltersStore
@@ -36,8 +37,13 @@ public struct IssueListView: View {
     @State private var boardColumnID: String?
     @AppStorage private var viewModeRaw: String
 
-    public init(project: JiraProject, selection: Binding<JiraIssue?>) {
+    public init(
+        project: JiraProject,
+        selection: Binding<JiraIssue?>,
+        onOpenSettings: (() -> Void)? = nil
+    ) {
         self._selection = selection
+        self.onOpenSettings = onOpenSettings
         let placeholderAPI = BalmAPI_PlaceholderForState.shared
         self._model = State(initialValue: IssueListViewModel(project: project, api: placeholderAPI.api))
         self._filterStore = State(initialValue: FilterStore(projectKey: project.key))
@@ -230,6 +236,11 @@ public struct IssueListView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .disabled(model.loadState == .loading)
+                    if let onOpenSettings {
+                        Button(action: onOpenSettings) {
+                            Label("Settings", systemImage: "gearshape")
+                        }
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")

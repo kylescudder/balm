@@ -114,9 +114,12 @@ public struct MainShellView: View {
 
     private func adaptiveShell(project: JiraProject) -> some View {
         NavigationStack(path: $navPath) {
-            IssueListView(project: project, selection: $selectedIssue)
+            IssueListView(
+                project: project,
+                selection: $selectedIssue,
+                onOpenSettings: { showingSettings = true }
+            )
                 .toolbar {
-                    settingsToolbar
                     inboxToolbar
                 }
                 .navigationDestination(for: JiraIssue.self) { issue in
@@ -130,19 +133,6 @@ public struct MainShellView: View {
             SettingsView()
                 .environment(env)
                 .themed()
-        }
-    }
-
-    /// iOS settings entry point (macOS uses the ⌘, Settings scene).
-    @ToolbarContentBuilder
-    private var settingsToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Button {
-                showingSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .help("Settings")
         }
     }
 
