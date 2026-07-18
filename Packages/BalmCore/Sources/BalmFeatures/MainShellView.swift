@@ -11,7 +11,6 @@ public struct MainShellView: View {
     @State private var showingProjectChooser = false
     @State private var showingSettings = false
     @State private var showingInbox = false
-    @State private var navPath: [JiraIssue] = []
 
     public init() {}
 
@@ -48,7 +47,6 @@ public struct MainShellView: View {
         }
         .onChange(of: env.activeProjectStore.project) { _, _ in
             selectedIssue = nil
-            navPath.removeAll()
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -64,13 +62,9 @@ public struct MainShellView: View {
     }
 
     /// Presents an issue chosen in the Inbox sheet the same way the rest of
-    /// the app presents detail: the macOS inspector / the iOS stack push.
+    /// the app presents detail: the macOS inspector / the iOS native card.
     private func open(fromInbox issue: JiraIssue) {
-        #if os(macOS)
         selectedIssue = issue
-        #else
-        navPath.append(issue)
-        #endif
     }
 
     @ViewBuilder
@@ -110,25 +104,31 @@ public struct MainShellView: View {
     }
     #endif
 
-    // MARK: - iOS / iPadOS: single stack, detail is a push, inbox is a sheet
+    // MARK: - iOS / iPadOS: list stays in place, detail opens as a native card
 
     private func adaptiveShell(project: JiraProject) -> some View {
-        NavigationStack(path: $navPath) {
+        NavigationStack {
             IssueListView(
                 project: project,
                 selection: $selectedIssue,
                 onOpenSettings: { showingSettings = true }
             )
-                .toolbar {
-                    inboxToolbar
-                }
-                .navigationDestination(for: JiraIssue.self) { issue in
-                    IssueDetailView(issue: issue)
-                }
+            .toolbar {
+                inboxToolbar
+            }
         }
-        .environment(\.openIssue, OpenIssueAction { navPath.append($0) })
+        .environment(\.openIssue, OpenIssueAction { selectedIssue = $0 })
         // Rebuild Issues only when the project changes.
         .id(project.id)
+        .sheet(item: $selectedIssue) { issue in
+            NavigationStack {
+                IssueDetailView(issue: issue, onClose: { selectedIssue = nil })
+            }
+            .environment(env)
+            .themed()
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environment(env)
