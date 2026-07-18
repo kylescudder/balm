@@ -1,9 +1,7 @@
 import SwiftUI
-import BalmDesignSystem
 
 struct LabelsEditorView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.balmTheme) private var theme
 
     let current: [String]
     let onApply: ([String]) -> Void
@@ -23,37 +21,33 @@ struct LabelsEditorView: View {
             confirmTitle: "Apply",
             onConfirm: { onApply(draft) }
         ) {
-            VStack(alignment: .leading, spacing: theme.spacing.m) {
-                HStack {
-                    TextField("Add label", text: $newLabel)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit(addLabel)
-                    Button("Add") { addLabel() }
-                        .disabled(trimmed.isEmpty)
+            Form {
+                Section("Add Label") {
+                    HStack {
+                        TextField("Label", text: $newLabel)
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                            .autocorrectionDisabled()
+                            .onSubmit(addLabel)
+                        Button("Add") { addLabel() }
+                            .disabled(trimmed.isEmpty)
+                    }
                 }
 
-                if draft.isEmpty {
-                    Text("No labels.")
-                        .foregroundStyle(theme.palette.mutedForeground)
-                } else {
-                    FlexibleStack(spacing: theme.spacing.xs) {
+                Section("Current Labels") {
+                    if draft.isEmpty {
+                        ContentUnavailableView("No labels", systemImage: "tag")
+                    } else {
                         ForEach(draft, id: \.self) { label in
-                            HStack(spacing: theme.spacing.xs) {
-                                BalmChip(label)
-                                Button {
-                                    draft.removeAll { $0 == label }
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(theme.palette.mutedForeground)
-                                }
-                                .buttonStyle(.borderless)
-                            }
+                            Text(label)
+                        }
+                        .onDelete { offsets in
+                            draft.remove(atOffsets: offsets)
                         }
                     }
                 }
-                Spacer()
             }
-            .padding(theme.spacing.l)
         }
     }
 

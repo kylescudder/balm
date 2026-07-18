@@ -14,89 +14,63 @@ struct AssigneePickerView: View {
 
     @State private var users: [JiraUser] = []
     @State private var isLoading = false
-
-    /// Folds the synthetic "Unassigned" choice into the same keyboard-navigable
-    /// list as the real users.
-    private enum Entry: Hashable {
-        case unassigned
-        case user(JiraUser)
-    }
-
-    private var entries: [Entry] {
-        [.unassigned] + users.map(Entry.user)
-    }
-
-    private var currentEntry: Entry {
-        guard let id = currentAccountID,
-              let match = users.first(where: { $0.accountId == id }) else { return .unassigned }
-        return .user(match)
-    }
+    @State private var searchText = ""
 
     var body: some View {
         PickerScaffold(title: "Assignee") {
-            KeyboardFilterList(
-                items: entries,
-                prompt: "Filter people",
-                isLoading: isLoading,
-                initialSelection: currentEntry,
-                filterText: filterText,
-                onActivate: activate
-            ) { entry in
-                row(entry)
+            List {
+                Button {
+                    onSelect(nil)
+                    dismiss()
+                } label: {
+                    HStack {
+                        Label("Unassigned", systemImage: "person.slash")
+                        Spacer()
+                        if currentAccountID == nil { Image(systemName: "checkmark") }
+                    }
+                }
+
+                if isLoading {
+                    ProgressView()
+                } else if filteredUsers.isEmpty {
+                    ContentUnavailableView("No people", systemImage: "person.2")
+                } else {
+                    ForEach(filteredUsers, id: \.accountId) { user in
+                        Button {
+                            onSelect(user)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: theme.spacing.s) {
+                                AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 28)
+                                VStack(alignment: .leading) {
+                                    Text(user.displayName)
+                                    if let email = user.emailAddress {
+                                        Text(email)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if user.accountId == currentAccountID {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(theme.palette.primary)
+                                }
+                            }
+                        }
+                    }
+                }
             }
+            .searchable(text: $searchText, prompt: "Search people")
             .task { await load() }
         }
     }
 
-    private func filterText(_ entry: Entry) -> String {
-        switch entry {
-        case .unassigned: return "Unassigned"
-        case .user(let user): return "\(user.displayName) \(user.emailAddress ?? "")"
-        }
-    }
-
-    private func activate(_ entry: Entry) {
-        switch entry {
-        case .unassigned: onSelect(nil)
-        case .user(let user): onSelect(user)
-        }
-        dismiss()
-    }
-
-    @ViewBuilder
-    private func row(_ entry: Entry) -> some View {
-        switch entry {
-        case .unassigned:
-            HStack {
-                Image(systemName: "person.slash")
-                    .frame(width: 28)
-                    .foregroundStyle(theme.palette.mutedForeground)
-                Text("Unassigned").foregroundStyle(theme.palette.foreground)
-                Spacer()
-                if currentAccountID == nil {
-                    Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
-                }
-            }
-            .contentShape(Rectangle())
-        case .user(let user):
-            HStack(spacing: theme.spacing.s) {
-                AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 28)
-                VStack(alignment: .leading) {
-                    Text(user.displayName)
-                        .foregroundStyle(theme.palette.foreground)
-                    if let email = user.emailAddress {
-                        Text(email)
-                            .font(theme.typography.caption)
-                            .foregroundStyle(theme.palette.mutedForeground)
-                    }
-                }
-                Spacer()
-                if user.accountId == currentAccountID {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(theme.palette.primary)
-                }
-            }
-            .contentShape(Rectangle())
+    private var filteredUsers: [JiraUser] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return users }
+        return users.filter {
+            $0.displayName.localizedStandardContains(query)
+                || ($0.emailAddress?.localizedStandardContains(query) ?? false)
         }
     }
 

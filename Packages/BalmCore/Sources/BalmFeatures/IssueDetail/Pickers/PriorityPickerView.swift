@@ -13,36 +13,52 @@ struct PriorityPickerView: View {
 
     @State private var priorities: [JiraPriority] = []
     @State private var isLoading = false
+    @State private var searchText = ""
 
     var body: some View {
         PickerScaffold(title: "Priority") {
-            KeyboardFilterList(
-                items: priorities,
-                prompt: "Filter priorities",
-                isLoading: isLoading,
-                initialSelection: priorities.first { $0.name == currentName },
-                filterText: { $0.name },
-                onActivate: { onSelect($0); dismiss() }
-            ) { priority in
-                HStack(spacing: theme.spacing.s) {
-                    if let icon = priority.iconUrl {
-                        AsyncImage(url: icon) { phase in
-                            if case .success(let img) = phase {
-                                img.resizable().scaledToFit()
-                            } else { Color.clear }
+            List {
+                if isLoading {
+                    ProgressView()
+                } else if filteredPriorities.isEmpty {
+                    ContentUnavailableView("No priorities", systemImage: "flag")
+                } else {
+                    ForEach(filteredPriorities, id: \.name) { priority in
+                        Button {
+                            onSelect(priority)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: theme.spacing.s) {
+                                if let icon = priority.iconUrl {
+                                    AsyncImage(url: icon) { phase in
+                                        if case .success(let img) = phase {
+                                            img.resizable().scaledToFit()
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                    .frame(width: 18, height: 18)
+                                }
+                                Text(priority.name)
+                                Spacer()
+                                if priority.name == currentName {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(theme.palette.primary)
+                                }
+                            }
                         }
-                        .frame(width: 18, height: 18)
-                    }
-                    Text(priority.name).foregroundStyle(theme.palette.foreground)
-                    Spacer()
-                    if priority.name == currentName {
-                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
                     }
                 }
-                .contentShape(Rectangle())
             }
+            .searchable(text: $searchText, prompt: "Search priorities")
             .task { await load() }
         }
+    }
+
+    private var filteredPriorities: [JiraPriority] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return priorities }
+        return priorities.filter { $0.name.localizedStandardContains(query) }
     }
 
     private func load() async {
