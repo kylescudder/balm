@@ -6,17 +6,20 @@ public struct BoardView: View {
     @Environment(\.balmTheme) private var theme
     let columns: [BoardColumn]
     @Binding var selection: JiraIssue?
+    @Binding var columnSelection: String?
     var onColumnViewed: (() -> Void)?
     var onMove: ((String, BoardColumn) -> Void)?
 
     public init(
         columns: [BoardColumn],
         selection: Binding<JiraIssue?>,
+        columnSelection: Binding<String?>,
         onColumnViewed: (() -> Void)? = nil,
         onMove: ((String, BoardColumn) -> Void)? = nil
     ) {
         self.columns = columns
         self._selection = selection
+        self._columnSelection = columnSelection
         self.onColumnViewed = onColumnViewed
         self.onMove = onMove
     }
@@ -59,11 +62,11 @@ public struct BoardView: View {
             }
         } else {
             // iPhone / iPad compact: paged TabView, one column fills width.
-            TabView {
+            TabView(selection: $columnSelection) {
                 ForEach(columns) { column in
                     BoardColumnView(column: column, selection: $selection, onMove: onMove)
                         .padding(theme.spacing.s)
-                        .tag(column.id)
+                        .tag(Optional(column.id))
                         .onAppear { onColumnViewed?() }
                 }
             }
