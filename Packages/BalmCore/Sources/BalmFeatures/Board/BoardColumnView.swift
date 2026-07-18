@@ -4,6 +4,7 @@ import BalmDesignSystem
 
 struct BoardColumnView: View {
     @Environment(\.balmTheme) private var theme
+    @Environment(\.openIssue) private var openIssue
     let column: BoardColumn
     @Binding var selection: JiraIssue?
     /// Drag-and-drop: called with the dropped issue key + this column.
@@ -17,12 +18,8 @@ struct BoardColumnView: View {
             ScrollView {
                 LazyVStack(spacing: theme.spacing.s) {
                     ForEach(column.issues, id: \.self) { issue in
-                        NavigationLink(value: issue) {
-                            IssueCardView(issue: issue)
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded { selection = issue })
-                        .draggable(issue.key)
+                        issueCard(issue)
+                            .draggable(issue.key)
                     }
                     if column.issues.isEmpty {
                         Text("No issues")
@@ -50,6 +47,25 @@ struct BoardColumnView: View {
         } isTargeted: { targeted in
             isTargeted = targeted
         }
+    }
+
+    @ViewBuilder
+    private func issueCard(_ issue: JiraIssue) -> some View {
+        #if os(macOS)
+        NavigationLink(value: issue) {
+            IssueCardView(issue: issue)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { selection = issue })
+        #else
+        Button {
+            selection = issue
+            openIssue(issue)
+        } label: {
+            IssueCardView(issue: issue)
+        }
+        .buttonStyle(.plain)
+        #endif
     }
 
     private var header: some View {

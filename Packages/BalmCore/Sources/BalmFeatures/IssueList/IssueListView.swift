@@ -392,6 +392,7 @@ public struct IssueListView: View {
     private var listBody: some View {
         List(selection: $selection) {
             ForEach(filteredIssues, id: \.self) { issue in
+                #if os(macOS)
                 NavigationLink(value: issue) {
                     IssueRowView(issue: issue)
                 }
@@ -400,6 +401,15 @@ public struct IssueListView: View {
                     model.refreshInBackground()
                 })
                 .tag(issue)
+                #else
+                Button {
+                    selection = issue
+                    openIssueAction(issue)
+                } label: {
+                    IssueRowView(issue: issue)
+                }
+                .buttonStyle(.plain)
+                #endif
             }
         }
         .animation(.spring(duration: 0.25), value: filteredIssues.map(\.id))
