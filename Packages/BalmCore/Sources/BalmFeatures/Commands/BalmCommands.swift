@@ -28,6 +28,8 @@ public struct BalmCommands: Commands {
         CommandMenu("Go") {
             Button("Search…") { post(.balmSearchRequested) }
                 .keyboardShortcut("k", modifiers: [.command])
+            Button("Go to Inbox") { post(.balmGoToInboxRequested) }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
         }
 
         CommandGroup(after: .appInfo) {
@@ -53,4 +55,6 @@ public extension Notification.Name {
     /// Broadcast by the issue detail VM after a successful mutation so the board
     /// / list can update the matching card immediately. userInfo["issue"].
     static let balmIssueUpdated = Notification.Name("app.balm.issueUpdated")
+    /// Requests the shell present the Inbox sheet (⇧⌘I on macOS).
+    static let balmGoToInboxRequested = Notification.Name("app.balm.goToInboxRequested")
 }

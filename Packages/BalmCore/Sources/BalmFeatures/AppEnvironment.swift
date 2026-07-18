@@ -23,6 +23,7 @@ public final class AppEnvironment {
     public let toaster: Toaster
     public let networkMonitor: NetworkMonitor
     public let activeProjectStore: ActiveProjectStore
+    public let inboxStore: InboxStore
 
     public init(
         oauth: AtlassianOAuth,
@@ -31,7 +32,8 @@ public final class AppEnvironment {
         oauthConfig: OAuthConfig,
         toaster: Toaster = Toaster(),
         networkMonitor: NetworkMonitor = NetworkMonitor(),
-        activeProjectStore: ActiveProjectStore = ActiveProjectStore()
+        activeProjectStore: ActiveProjectStore = ActiveProjectStore(),
+        inboxStore: InboxStore? = nil
     ) {
         self.oauth = oauth
         self.tokenStore = tokenStore
@@ -40,6 +42,12 @@ public final class AppEnvironment {
         self.toaster = toaster
         self.networkMonitor = networkMonitor
         self.activeProjectStore = activeProjectStore
+        // Default constructed here (rather than as a parameter default, which
+        // can't reference the `api`/`networkMonitor`/`toaster` parameters
+        // above) so callers that don't care about injection still get a
+        // working store.
+        let monitor = networkMonitor
+        self.inboxStore = inboxStore ?? InboxStore(api: api, isOnline: { monitor.isOnline }, toaster: toaster)
     }
 
     public func bootstrap() async {
@@ -92,6 +100,7 @@ public final class AppEnvironment {
         }
         // Forget the user's active project — next sign-in starts fresh.
         activeProjectStore.set(nil)
+        inboxStore.stopAndReset()
         authState = .signedOut
     }
 
@@ -101,9 +110,22 @@ public final class AppEnvironment {
             if case .signedIn(let siteName, let siteURL, _) = authState {
                 authState = .signedIn(siteName: siteName, siteURL: siteURL, user: user)
             }
+            inboxStore.start(accountId: user.accountId)
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// Retries `fetchCurrentUser()` if it never succeeded — e.g. a transient
+    /// failure (offline, 5xx) at launch that left `authState`'s `user` nil and
+    /// `inboxStore` never started. Nothing else retries that call, so without
+    /// this the inbox stays dead for the rest of the session even after
+    /// connectivity returns. Called from the scenePhase-active hook that
+    /// already re-syncs the inbox on foreground; a no-op once the user has
+    /// loaded.
+    public func fetchCurrentUserIfNeeded() async {
+        guard case .signedIn(_, _, let user) = authState, user == nil else { return }
+        await fetchCurrentUser()
     }
 }
 
@@ -130,6 +152,17 @@ public extension AppEnvironment {
         let keychain = KeychainStore.live
         let tokenStore = TokenStore(keychain: keychain, refresher: oauth)
         let api = JiraClient(tokens: tokenStore)
-        return AppEnvironment(oauth: oauth, tokenStore: tokenStore, api: api, oauthConfig: config)
+        let networkMonitor = NetworkMonitor()
+        let toaster = Toaster()
+        let inboxStore = InboxStore(api: api, isOnline: { networkMonitor.isOnline }, toaster: toaster)
+        return AppEnvironment(
+            oauth: oauth,
+            tokenStore: tokenStore,
+            api: api,
+            oauthConfig: config,
+            toaster: toaster,
+            networkMonitor: networkMonitor,
+            inboxStore: inboxStore
+        )
     }
 }
