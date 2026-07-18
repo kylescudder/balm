@@ -51,7 +51,7 @@ struct KeyboardMultiSelect: View {
         .keyboardShortcutIfPresent(shortcut)
         #if os(macOS)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            NativeMultiSelectList(title: title, options: options, selection: $selection)
+            NativeMultiSelectPopover(title: title, options: options, selection: $selection)
                 .frame(minWidth: 280, minHeight: 220, maxHeight: 420)
         }
         #else
@@ -71,6 +71,37 @@ struct KeyboardMultiSelect: View {
         return "\(selection.count) selected"
     }
 }
+
+enum MultiSelectClearPolicy {
+    static func shouldShowClearAction(selection: [String], options: [MultiSelectOption]) -> Bool {
+        !selection.isEmpty
+    }
+}
+
+#if os(macOS)
+private struct NativeMultiSelectPopover: View {
+    let title: String
+    let options: [MultiSelectOption]
+    @Binding var selection: [String]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                if MultiSelectClearPolicy.shouldShowClearAction(selection: selection, options: options) {
+                    Button("Clear") { selection.removeAll() }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            Divider()
+            NativeMultiSelectList(title: title, options: options, selection: $selection)
+        }
+    }
+}
+#endif
 
 private struct NativeMultiSelectList: View {
     let title: String
@@ -126,7 +157,7 @@ private struct NativeMultiSelectSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Clear") { selection.removeAll() }
-                            .disabled(selection.isEmpty)
+                            .disabled(!MultiSelectClearPolicy.shouldShowClearAction(selection: selection, options: options))
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { dismiss() }
