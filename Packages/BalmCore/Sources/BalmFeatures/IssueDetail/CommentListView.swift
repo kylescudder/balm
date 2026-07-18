@@ -345,7 +345,7 @@ private struct CommentRow: View {
 
     private var actionsMenu: some View {
         Menu {
-            Button("Edit", systemImage: "pencil") {
+            Button("Edit") {
                 draftBody = comment.body
                 isEditing = true
             }
