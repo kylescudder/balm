@@ -158,7 +158,7 @@ struct IssueMetadataPanel: View {
                 Task { await model.setPriority(priority.name) }
             }
         case .assignee:
-            AssigneePickerView(projectKey: issue.projectKey, currentAccountID: issue.assignee?.accountId) { user in
+            AssigneePickerView(projectKey: issue.projectKey, currentAccountID: nil) { user in
                 Task { await model.setAssignee(user) }
             }
         case .sprint:
