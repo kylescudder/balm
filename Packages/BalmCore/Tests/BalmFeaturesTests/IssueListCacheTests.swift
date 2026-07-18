@@ -35,6 +35,17 @@ final class IssueListCacheTests: XCTestCase {
         XCTAssertNil(cache.issues(for: filtered))
     }
 
+    @MainActor
+    func testSharedCacheSurvivesIssueListViewModelRecreation() {
+        SharedIssueListCache.reset()
+        let issue = Self.issue(key: "BALM-1")
+        let key = IssueListCacheKey(projectID: "100", sprintNames: ["Sprint 1"], definition: .empty)
+
+        SharedIssueListCache.store([issue], for: key)
+
+        XCTAssertEqual(SharedIssueListCache.issues(for: key), [issue])
+    }
+
     private static func issue(key: String) -> JiraIssue {
         JiraIssue(
             id: key,

@@ -87,7 +87,6 @@ public final class IssueListViewModel {
     private let api: JiraClient
     private let toaster: Toaster?
     private var loadTask: Task<Void, Never>?
-    private var issueCache = IssueListCache()
 
     public init(project: JiraProject, api: JiraClient, toaster: Toaster? = nil) {
         self.project = project
@@ -178,7 +177,7 @@ public final class IssueListViewModel {
     public func reload() {
         let names = selectedSprintNames
         let key = IssueListCacheKey(projectID: project.id, sprintNames: names, definition: userDefinition)
-        if let cached = issueCache.issues(for: key) {
+        if let cached = SharedIssueListCache.issues(for: key) {
             issues = cached
             loadState = .loaded
             refreshInBackground()
@@ -242,7 +241,7 @@ public final class IssueListViewModel {
                 isUserVisibleRefresh: showLoading
             )
             issues = next
-            issueCache.store(
+            SharedIssueListCache.store(
                 next,
                 for: IssueListCacheKey(projectID: project.id, sprintNames: names, definition: userDefinition)
             )
@@ -405,7 +404,7 @@ public final class IssueListViewModel {
         if let index = issues.firstIndex(where: { $0.key == issue.key }) {
             issues[index] = issue
         }
-        issueCache.update(issue)
+        SharedIssueListCache.update(issue)
     }
 
     // MARK: - Drag & drop
