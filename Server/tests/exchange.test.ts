@@ -14,7 +14,7 @@ describe('native Atlassian token exchange', () => {
     else process.env.ATLASSIAN_CLIENT_SECRET = originalClientSecret
   })
 
-  test('sends the Atlassian audience when exchanging an authorization code', async () => {
+  test('sends the Atlassian audience and PKCE verifier when exchanging an authorization code', async () => {
     process.env.ATLASSIAN_CLIENT_ID = 'client-id'
     process.env.ATLASSIAN_CLIENT_SECRET = 'client-secret'
     let tokenPayload: Record<string, unknown> | undefined
@@ -34,7 +34,11 @@ describe('native Atlassian token exchange', () => {
       new Request('http://localhost/api/auth/native/exchange', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: 'code', redirect_uri: 'balm://auth/callback' })
+        body: JSON.stringify({
+          code: 'code',
+          code_verifier: 'verifier',
+          redirect_uri: 'balm://auth/callback'
+        })
       })
     )
 
@@ -43,9 +47,10 @@ describe('native Atlassian token exchange', () => {
       client_id: 'client-id',
       client_secret: 'client-secret',
       code: 'code',
+      code_verifier: 'verifier',
       redirect_uri: 'balm://auth/callback',
       audience: 'api.atlassian.com'
     })
-    expect(tokenPayload).not.toHaveProperty('code_verifier')
+    expect(tokenPayload).toHaveProperty('code_verifier', 'verifier')
   })
 })

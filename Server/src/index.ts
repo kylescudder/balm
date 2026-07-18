@@ -40,23 +40,24 @@ app.get('/health', (c) => c.json({ ok: true }))
 
 /**
  * Native client token exchange. Atlassian's /oauth/token requires client_secret
- * so the secret stays here. The native app posts { code, redirect_uri } and
- * gets a token bundle plus the resolved Jira site identity in one round-trip.
+ * even with PKCE, so the secret stays here. The native app posts
+ * { code, code_verifier, redirect_uri } and gets a token bundle plus the
+ * resolved Jira site identity in one round-trip.
  */
 app.post('/api/auth/native/exchange', async (c) => {
   const secrets = requireSecrets()
   if (secrets instanceof Response) return secrets
 
-  let body: { code?: string; redirect_uri?: string }
+  let body: { code?: string; code_verifier?: string; redirect_uri?: string }
   try {
     body = await c.req.json()
   } catch {
     return c.json({ error: 'Invalid JSON body' }, 400)
   }
-  const { code, redirect_uri } = body
-  if (!code || !redirect_uri) {
+  const { code, code_verifier, redirect_uri } = body
+  if (!code || !code_verifier || !redirect_uri) {
     return c.json(
-      { error: 'Missing one of: code, redirect_uri' },
+      { error: 'Missing one of: code, code_verifier, redirect_uri' },
       400
     )
   }
@@ -69,6 +70,7 @@ app.post('/api/auth/native/exchange', async (c) => {
       client_id: secrets.clientId,
       client_secret: secrets.clientSecret,
       code,
+      code_verifier,
       redirect_uri,
       audience: 'api.atlassian.com'
     })
