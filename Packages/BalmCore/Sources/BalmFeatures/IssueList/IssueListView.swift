@@ -33,6 +33,7 @@ public struct IssueListView: View {
     @State private var showingFiltersSheet = false
     @State private var searchText = ""
     @State private var searchPresented = false
+    @State private var boardColumnID: String?
     @AppStorage private var viewModeRaw: String
 
     public init(project: JiraProject, selection: Binding<JiraIssue?>) {
@@ -358,11 +359,23 @@ public struct IssueListView: View {
             BoardView(
                 columns: filteredColumns,
                 selection: $selection,
+                columnSelection: $boardColumnID,
                 onColumnViewed: { model.refreshInBackground() }
             ) { key, column in
                 Task { await model.moveIssue(key: key, to: column) }
             }
+            .onAppear { syncBoardColumnSelection() }
+            .onChange(of: filteredColumns.map(\.id)) { _, _ in syncBoardColumnSelection() }
+            .onChange(of: selection) { _, _ in syncBoardColumnSelection() }
         }
+    }
+
+    private func syncBoardColumnSelection() {
+        boardColumnID = BoardColumnSelectionPolicy.preferredColumnID(
+            current: boardColumnID,
+            selectedIssue: selection,
+            columns: filteredColumns
+        )
     }
 
     private var listBody: some View {
