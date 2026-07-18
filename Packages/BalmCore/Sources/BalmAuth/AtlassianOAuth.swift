@@ -38,6 +38,14 @@ public final class AtlassianOAuth: NSObject, Sendable {
         request.httpBody = data
 
         let (body, response) = try await urlSession.data(for: request)
+        // A 4xx rejection of a refresh (Atlassian's invalid_grant /
+        // unauthorized_client passed through by the BFF) means the rotating
+        // refresh token is permanently dead — revoked, expired after 90 days
+        // of inactivity, or invalidated by reuse detection. Retrying can
+        // never succeed, so surface it distinctly from transient failures.
+        if let http = response as? HTTPURLResponse, [400, 401, 403].contains(http.statusCode) {
+            throw AuthError.sessionExpired
+        }
         try Self.assertOK(response, data: body)
         return try Self.decoder.decode(TokenResponse.self, from: body)
     }
