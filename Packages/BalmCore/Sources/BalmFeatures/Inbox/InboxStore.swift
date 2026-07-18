@@ -505,8 +505,7 @@ public final class InboxStore {
     private func postSystemNotifications(for newItems: [BalmNotification]) async {
         guard systemNotificationsEnabled else { return }
         let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+        guard await Self.systemNotificationsAreAuthorized(center: center) else { return }
 
         if newItems.count > 5 {
             let content = UNMutableNotificationContent()
@@ -579,6 +578,15 @@ public final class InboxStore {
         let count = systemNotificationsEnabled ? unreadCount : 0
         Task {
             try? await UNUserNotificationCenter.current().setBadgeCount(count)
+        }
+    }
+
+    private nonisolated static func systemNotificationsAreAuthorized(center: UNUserNotificationCenter) async -> Bool {
+        await withCheckedContinuation { continuation in
+            center.getNotificationSettings { settings in
+                let status = settings.authorizationStatus
+                continuation.resume(returning: status == .authorized || status == .provisional)
+            }
         }
     }
 
