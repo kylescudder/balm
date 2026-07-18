@@ -31,6 +31,76 @@ public struct IssueDetailView: View {
     }
 
     public var body: some View {
+        #if os(iOS)
+        iosBody
+            .task(id: initialIssue.key) { await reconnectAndLoad() }
+            .id(initialIssue.key)
+        #else
+        macBody
+            .task(id: initialIssue.key) { await reconnectAndLoad() }
+            .id(initialIssue.key)
+        #endif
+    }
+
+    #if os(iOS)
+    private var iosBody: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(currentIssue.summary)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if case .loading = model.loadState {
+                        HStack {
+                            ProgressView()
+                            Text("Loading latest issue details…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if case .failed(let message) = model.loadState {
+                        Text(message)
+                            .foregroundStyle(.red)
+                    }
+                }
+
+                descriptionSection
+                IssueMetadataPanel(model: model)
+                AttachmentListView(model: model)
+                IssueLinkListView(model: model)
+                CommentListView(model: model)
+                ChangelogView(entries: model.details.changelog)
+            }
+            .navigationTitle(currentIssue.key)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let onClose {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close", action: onClose)
+                    }
+                }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if let url = issueBrowseURL {
+                        Button {
+                            openURL(url)
+                        } label: {
+                            Image(systemName: "safari")
+                        }
+                        .accessibilityLabel("Open in Jira")
+                    }
+                    Button {
+                        model.reload()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .accessibilityLabel("Refresh")
+                }
+            }
+        }
+    }
+    #endif
+
+    private var macBody: some View {
         GeometryReader { geo in
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.spacing.xl) {
@@ -47,10 +117,6 @@ public struct IssueDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .task(id: initialIssue.key) {
-            await reconnectAndLoad()
-        }
-        .id(initialIssue.key)
     }
 
     private var header: some View {
@@ -134,30 +200,32 @@ public struct IssueDetailView: View {
     @State private var editingDescription = false
 
     private var descriptionSection: some View {
-        VStack(alignment: .leading, spacing: theme.spacing.m) {
-            HStack {
-                SectionHeading("Description")
-                Spacer()
+        Group {
+            #if os(iOS)
+            Section("Description") {
+                descriptionContent
                 Button {
                     editingDescription = true
                 } label: {
-                    Label("Edit", systemImage: "pencil")
+                    Label("Edit Description", systemImage: "pencil")
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
             }
-            if let adf = currentIssue.descriptionADF,
-               let blocks = try? renderer.render(json: adf, attachments: model.details.attachments) {
-                ADFContentView(blocks: blocks)
-            } else if let text = currentIssue.descriptionText, !text.isEmpty {
-                Text(text)
-                    .font(theme.typography.body)
-                    .foregroundStyle(theme.palette.foreground)
-            } else {
-                Text(isLoaded ? "No description." : "Loading description…")
-                    .font(theme.typography.callout)
-                    .foregroundStyle(theme.palette.mutedForeground)
+            #else
+            VStack(alignment: .leading, spacing: theme.spacing.m) {
+                HStack {
+                    SectionHeading("Description")
+                    Spacer()
+                    Button {
+                        editingDescription = true
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                }
+                descriptionContent
             }
+            #endif
         }
         .sheet(isPresented: $editingDescription) {
             DescriptionEditorView(
@@ -166,6 +234,26 @@ public struct IssueDetailView: View {
                     Task { await model.setDescription(plainText: value) }
                 }
             )
+        }
+    }
+
+    @ViewBuilder
+    private var descriptionContent: some View {
+        if let adf = currentIssue.descriptionADF,
+           let blocks = try? renderer.render(json: adf, attachments: model.details.attachments) {
+            ADFContentView(blocks: blocks)
+        } else if let text = currentIssue.descriptionText, !text.isEmpty {
+            Text(text)
+                #if !os(iOS)
+                .font(theme.typography.body)
+                .foregroundStyle(theme.palette.foreground)
+                #endif
+        } else {
+            Text(isLoaded ? "No description." : "Loading description…")
+                .foregroundStyle(.secondary)
+                #if !os(iOS)
+                .font(theme.typography.callout)
+                #endif
         }
     }
 
