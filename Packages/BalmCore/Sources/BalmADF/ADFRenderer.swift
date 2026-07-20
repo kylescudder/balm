@@ -104,14 +104,16 @@ public struct ADFRenderer: Sendable {
     private func renderMedia(_ node: ADFNode, context: Context) -> ADFBlock? {
         let alt = node.attrs?["alt"]?.stringValue ?? node.attrs?["title"]?.stringValue
 
-        // Prefer matching to a known attachment by filename or id.
+        // Prefer matching to a known attachment by filename, media-services id,
+        // or Jira's numeric attachment id. Comment ADF `media.attrs.id` uses the
+        // Media Services UUID, not the Jira attachment id.
         if let altName = alt,
            let match = context.attachments.first(where: { $0.filename == altName }),
            let url = match.content {
             return .image(url: url, alt: match.filename)
         }
         if let idAttr = node.attrs?["id"]?.stringValue {
-            if let match = context.attachments.first(where: { $0.id == idAttr }) {
+            if let match = context.attachments.first(where: { $0.mediaFileID == idAttr || $0.id == idAttr }) {
                 if let url = match.content {
                     return .image(url: url, alt: match.filename)
                 }

@@ -5,11 +5,12 @@ import BalmDesignSystem
 struct ADFContentView: View {
     @Environment(\.balmTheme) private var theme
     let blocks: [ADFBlock]
+    var loadsImagesWithJiraAuth = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.spacing.m) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                ADFBlockView(block: block)
+                ADFBlockView(block: block, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
             }
         }
     }
@@ -18,6 +19,7 @@ struct ADFContentView: View {
 struct ADFBlockView: View {
     @Environment(\.balmTheme) private var theme
     let block: ADFBlock
+    var loadsImagesWithJiraAuth = false
 
     var body: some View {
         switch block {
@@ -66,21 +68,29 @@ struct ADFBlockView: View {
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: theme.spacing.xs) {
                     ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                        ADFBlockView(block: child)
+                        ADFBlockView(block: child, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
                     }
                 }
             }
             .padding(.leading, theme.spacing.xs)
 
         case .image(let url, let alt):
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFit()
-                case .failure:
-                    placeholderImage(alt: alt ?? "image")
-                default:
-                    ProgressView()
+            Group {
+                if loadsImagesWithJiraAuth {
+                    JiraImageView(url: url, contentMode: .fit) { _ in
+                        placeholderImage(alt: alt ?? "image")
+                    }
+                } else {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFit()
+                        case .failure:
+                            placeholderImage(alt: alt ?? "image")
+                        default:
+                            ProgressView()
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -104,7 +114,7 @@ struct ADFBlockView: View {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
                             VStack(alignment: .leading, spacing: theme.spacing.xs) {
                                 ForEach(Array(cell.enumerated()), id: \.offset) { _, block in
-                                    ADFBlockView(block: block)
+                                    ADFBlockView(block: block, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,7 +147,7 @@ struct ADFBlockView: View {
                 .frame(width: 18, alignment: .leading)
             VStack(alignment: .leading, spacing: theme.spacing.xs) {
                 ForEach(Array(item.enumerated()), id: \.offset) { _, block in
-                    ADFBlockView(block: block)
+                    ADFBlockView(block: block, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
                 }
             }
         }

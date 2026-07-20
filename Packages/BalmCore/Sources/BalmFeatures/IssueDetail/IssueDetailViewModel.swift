@@ -72,7 +72,7 @@ public final class IssueDetailViewModel {
             let raw = try await detailReq
             let (mapped, bundle) = IssueDetailMapper.decode(raw, instanceFieldID: instanceField)
             issue = mapped
-            details = bundle
+            details = await detailsWithResolvedMediaFileIDs(bundle)
 
             // Transitions can fail independently (permissions etc) — don't blow up the screen.
             if let response = try? await transitionsReq {
@@ -353,12 +353,16 @@ public final class IssueDetailViewModel {
                     filename: image.filename,
                     mimeType: image.mimeType ?? "image/png"
                 ))
-                details.attachments.append(contentsOf: raws.map(Self.mapAttachment))
+                var mappedAttachments = raws.map(Self.mapAttachment)
                 for raw in raws {
                     if let url = raw.content, let id = await api.mediaFileID(forContentURL: url) {
                         mediaFileIDs.append(id)
+                        if let index = mappedAttachments.firstIndex(where: { $0.id == raw.id }) {
+                            mappedAttachments[index].mediaFileID = id
+                        }
                     }
                 }
+                details.attachments.append(contentsOf: mappedAttachments)
             }
 
             let raw = try await api.send(IssueEndpoints.AddComment(
@@ -417,10 +421,13 @@ public final class IssueDetailViewModel {
                         filename: image.filename,
                         mimeType: image.mimeType ?? "image/png"
                     ))
-                    details.attachments.append(contentsOf: raws.map(Self.mapAttachment))
+                    var mappedAttachments = raws.map(Self.mapAttachment)
                     let pixelSize = Self.imagePixelSize(of: image.data)
                     for raw in raws {
                         if let url = raw.content, let id = await api.mediaFileID(forContentURL: url) {
+                            if let index = mappedAttachments.firstIndex(where: { $0.id == raw.id }) {
+                                mappedAttachments[index].mediaFileID = id
+                            }
                             resolved.append(.image(
                                 mediaFileID: id,
                                 width: pixelSize?.width,
@@ -428,6 +435,7 @@ public final class IssueDetailViewModel {
                             ))
                         }
                     }
+                    details.attachments.append(contentsOf: mappedAttachments)
                 }
             }
 
@@ -525,7 +533,7 @@ public final class IssueDetailViewModel {
                 filename: filename,
                 mimeType: mimeType ?? "application/octet-stream"
             ))
-            let mapped = raws.map(Self.mapAttachment)
+            let mapped = await attachmentsWithResolvedMediaFileIDs(raws.map(Self.mapAttachment))
             details.attachments.append(contentsOf: mapped)
             toaster?.success(raws.count == 1 ? "Uploaded \(filename)" : "Uploaded \(raws.count) files")
         } catch {
@@ -587,6 +595,21 @@ public final class IssueDetailViewModel {
             thumbnail: raw.thumbnail,
             created: raw.created
         )
+    }
+
+    private func detailsWithResolvedMediaFileIDs(_ details: JiraIssueDetails) async -> JiraIssueDetails {
+        var copy = details
+        copy.attachments = await attachmentsWithResolvedMediaFileIDs(copy.attachments)
+        return copy
+    }
+
+    private func attachmentsWithResolvedMediaFileIDs(_ attachments: [JiraAttachmentMeta]) async -> [JiraAttachmentMeta] {
+        var resolved = attachments
+        for index in resolved.indices where resolved[index].isImage && resolved[index].mediaFileID == nil {
+            guard let url = resolved[index].content else { continue }
+            resolved[index].mediaFileID = await api.mediaFileID(forContentURL: url)
+        }
+        return resolved
     }
 
     private static func mimeType(forExtension ext: String) -> String {
