@@ -9,6 +9,9 @@ public struct JiraAttachmentMeta: Codable, Sendable, Hashable, Identifiable {
     public var content: URL?
     public var thumbnail: URL?
     public var created: Date?
+    /// Atlassian Media Services file UUID used by ADF `media` nodes. This is
+    /// distinct from Jira's numeric attachment `id`.
+    public var mediaFileID: String?
 
     public init(
         id: String,
@@ -18,7 +21,8 @@ public struct JiraAttachmentMeta: Codable, Sendable, Hashable, Identifiable {
         isImage: Bool,
         content: URL? = nil,
         thumbnail: URL? = nil,
-        created: Date? = nil
+        created: Date? = nil,
+        mediaFileID: String? = nil
     ) {
         self.id = id
         self.filename = filename
@@ -28,5 +32,6 @@ public struct JiraAttachmentMeta: Codable, Sendable, Hashable, Identifiable {
         self.content = content
         self.thumbnail = thumbnail
         self.created = created
+        self.mediaFileID = mediaFileID
     }
 }

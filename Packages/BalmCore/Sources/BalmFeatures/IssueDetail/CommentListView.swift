@@ -37,6 +37,7 @@ struct CommentListView: View {
                 ForEach(model.details.comments) { comment in
                     CommentRow(
                         comment: comment,
+                        attachments: model.details.attachments,
                         renderer: renderer,
                         linkURL: commentLinkURL(for: comment),
                         onEdit: { newText in
@@ -263,6 +264,7 @@ struct CommentListView: View {
 private struct CommentRow: View {
     @Environment(\.balmTheme) private var theme
     let comment: JiraComment
+    let attachments: [JiraAttachmentMeta]
     let renderer: ADFRenderer
     let linkURL: URL?
     let onEdit: (String) -> Void
@@ -363,8 +365,8 @@ private struct CommentRow: View {
 
     @ViewBuilder
     private var bodyView: some View {
-        if let adf = comment.bodyADF, let blocks = try? renderer.render(json: adf) {
-            ADFContentView(blocks: blocks)
+        if let adf = comment.bodyADF, let blocks = try? renderer.render(json: adf, attachments: attachments) {
+            ADFContentView(blocks: blocks, loadsImagesWithJiraAuth: true)
         } else if !comment.body.isEmpty {
             Text(comment.body)
                 .font(theme.typography.body)
