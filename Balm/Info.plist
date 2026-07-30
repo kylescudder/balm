@@ -23,9 +23,9 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>ATLASSIAN_CLIENT_ID</key>
-	<string>ofnnfAPNAMWBc1QX8C5gUCFrHwfRNGSB</string>
+	<string>$(ATLASSIAN_CLIENT_ID)</string>
 	<key>BALM_BFF_BASE_URL</key>
-	<string>https://auth.balm.kylescudder.co.uk</string>
+	<string>$(BALM_BFF_BASE_URL)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -37,6 +37,16 @@ jobs:
           echo "tag=$REF" >> "$GITHUB_OUTPUT"
           echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Write build xcconfig
+        env:
+          IOS_SECRETS: ${{ secrets.IOS_SECRETS_XCCONFIG }}
+        run: |
+          if [ -n "${IOS_SECRETS}" ]; then
+            printf '%s\n' "$IOS_SECRETS" > Config/Secrets.xcconfig
+          else
+            cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
+          fi
+
       - name: Generate project
         run: xcodegen generate
 

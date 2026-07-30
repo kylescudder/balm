@@ -1,17 +1,17 @@
 name: iOS · TestFlight
 
 # Builds the iOS app, archives it, and uploads to TestFlight via
-# App Store Connect API. See docs/ci-testflight.md for the one-time
-# secrets setup.
+# App Store Connect API. Required signing and API-key secret names are
+# defined and validated by the setup steps below.
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'App/**'
-      - 'Packages/BalmCore/**'
+      - 'Balm/**'
       - 'project.yml'
+      - 'Config/Secrets.xcconfig.example'
       - 'Scripts/ci/**'
       - '.github/workflows/ios-testflight.yml'
 
@@ -52,6 +52,16 @@ jobs:
 
       - name: Install xcodegen
         run: brew install xcodegen
+
+      - name: Write Secrets.xcconfig
+        env:
+          IOS_SECRETS: ${{ secrets.IOS_SECRETS_XCCONFIG }}
+        run: |
+          if [ -n "${IOS_SECRETS}" ]; then
+            printf '%s\n' "$IOS_SECRETS" > Config/Secrets.xcconfig
+          else
+            cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
+          fi
 
       - name: Write App Store Connect API key
         env:
