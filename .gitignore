@@ -26,10 +26,21 @@ Balm.xcodeproj/
 .build/
 .swiftpm/
 Package.resolved
-Packages/*/Package.resolved
+Balm/BalmCore/Package.resolved
 
-## Node (BFF server)
+## Node / Astro
 node_modules/
+Site/.astro/
+Site/dist/
+
+## Secrets and local configuration
+Config/Secrets.xcconfig
+.env
+.env.local
+.env.*.local
+
+## Netlify
+.netlify/
 
 ## Local tooling
 .claude/settings.local.json

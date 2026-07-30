@@ -32,17 +32,27 @@ brew upgrade --cask balm
 
 ## Build from source
 
-Requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+Requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), and [Bun](https://bun.sh).
+
+For a first checkout, run the idempotent setup script. It checks the required tools, creates local configuration files from their examples, installs the site and BFF dependencies, and generates the Xcode project:
 
 ```sh
+./setup.sh
+```
+
+The equivalent manual Xcode setup is:
+
+```sh
+cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
 xcodegen generate     # generates Balm.xcodeproj from project.yml
 open Balm.xcodeproj    # build & run the "Balm" scheme
 ```
 
-The shared logic lives in the `BalmCore` Swift package (`Packages/BalmCore`) and can be built/tested independently:
+The app entry point and resources live in `Balm/`. Shared logic lives alongside them in the `BalmCore` Swift package (`Balm/BalmCore`) and can be built/tested independently:
 
 ```sh
-cd Packages/BalmCore && swift build && swift test
+swift build --package-path Balm/BalmCore
+swift test --package-path Balm/BalmCore
 ```
 
 ### Auth backend (BFF)
@@ -56,7 +66,7 @@ bun install
 bun run src/index.ts
 ```
 
-Register your own OAuth 2.0 (3LO) app at <https://developer.atlassian.com/console/myapps/>, then set `ATLASSIAN_CLIENT_ID` in `App/Info.plist` and the `Server/.env.local` to match.
+Register your own OAuth 2.0 (3LO) app at <https://developer.atlassian.com/console/myapps/>. Native build configuration lives in the git-ignored `Config/Secrets.xcconfig`, copied from `Config/Secrets.xcconfig.example`; set its `ATLASSIAN_CLIENT_ID` and `BALM_BFF_BASE_URL`, then use the same client ID plus the client secret in `Server/.env.local`. The client secret must stay server-side and must never be added to the xcconfig or the app bundle.
 
 ## Releases
 

@@ -17,7 +17,7 @@ settings:
     DEVELOPMENT_TEAM: "6AAGJ9Y234"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     GENERATE_INFOPLIST_FILE: NO
-    INFOPLIST_FILE: App/Info.plist
+    INFOPLIST_FILE: Balm/Info.plist
     PRODUCT_NAME: Balm
     PRODUCT_BUNDLE_IDENTIFIER: app.balm
     CURRENT_PROJECT_VERSION: 1
@@ -26,23 +26,28 @@ settings:
 
 packages:
   BalmCore:
-    path: Packages/BalmCore
+    path: Balm/BalmCore
 
 targets:
   Balm:
     type: application
     supportedDestinations: [iOS, iPadOS, macOS]
     sources:
-      - App
+      - path: Balm
+        excludes:
+          - BalmCore
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
-        CODE_SIGN_ENTITLEMENTS: App/Balm.entitlements
+        CODE_SIGN_ENTITLEMENTS: Balm/Balm.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_HARDENED_RUNTIME: YES
+    configFiles:
+      Debug: Config/Secrets.xcconfig
+      Release: Config/Secrets.xcconfig
     dependencies:
       - package: BalmCore
         product: BalmFeatures
