@@ -102,6 +102,9 @@ public final class IssueListViewModel {
     private let toaster: Toaster?
     private var loadTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
+    /// The trimmed query `globalResults` were fetched for — used to detect when
+    /// the live text has moved on and the committed results are stale.
+    private var committedQuery: String?
 
     public init(project: JiraProject, api: JiraClient, toaster: Toaster? = nil) {
         self.project = project
@@ -391,6 +394,7 @@ public final class IssueListViewModel {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { clearSearch(); return }
+        committedQuery = trimmed
         searchState = .searching
         let task: Task<Void, Never> = Task { [weak self] in
             guard let self else { return }
@@ -410,11 +414,22 @@ public final class IssueListViewModel {
         await task.value
     }
 
+    /// Drop the committed results when the live query no longer matches the term
+    /// they were fetched for, so a newer term never shows stale instance-wide
+    /// hits (or leaves them up after a failed direct-key lookup). A no-op while
+    /// idle or while the query is unchanged.
+    public func invalidateSearchIfQueryChanged(_ query: String) {
+        guard searchState != .idle else { return }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != committedQuery { clearSearch() }
+    }
+
     /// Drop any global search results and reset the search UI to idle — called
     /// when the search field is emptied or dismissed.
     public func clearSearch() {
         searchTask?.cancel()
         searchTask = nil
+        committedQuery = nil
         globalResults = []
         searchState = .idle
     }

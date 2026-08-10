@@ -192,11 +192,10 @@ public struct IssueListView: View {
             Task { await submitSearch() }
         }
         .onChange(of: searchText) { _, next in
-            // Emptying the field drops the global results and restores the
-            // plain sprint/filter list.
-            if next.trimmingCharacters(in: .whitespaces).isEmpty {
-                model.clearSearch()
-            }
+            // Any material change to the query (including emptying it) drops the
+            // committed instance-wide results, so a new term never shows stale
+            // hits from the previous one until ↵ is pressed again.
+            model.invalidateSearchIfQueryChanged(next)
         }
         .onReceive(NotificationCenter.default.publisher(for: .balmSearchRequested)) { _ in
             // Cmd+K focuses the inline filter rather than opening a modal.

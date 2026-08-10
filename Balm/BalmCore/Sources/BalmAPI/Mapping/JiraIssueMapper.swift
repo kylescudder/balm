@@ -14,12 +14,19 @@ public enum JiraIssueMapper {
             names.first { $0.value.localizedCaseInsensitiveContains("Instance") }?.key
         } ?? instanceFieldID
         let instanceName = resolvedInstanceFieldID.flatMap { raw.customFieldStrings[$0] }
+        // Keep the rich ADF for rendering, but also flatten it to plain text so
+        // the instant in-view filter can match on the body — list issues carry
+        // only the ADF payload otherwise. Rendering still prefers the ADF.
+        let descriptionData = nonEmpty(f.description?.rawJSON)
+        let descriptionPlain = descriptionData
+            .map { IssueDetailMapper.plainTextFromBody($0) }
+            .flatMap { $0.isEmpty ? nil : $0 }
         return JiraIssue(
             id: raw.id,
             key: raw.key,
             summary: f.summary,
-            descriptionText: nil,
-            descriptionADF: nonEmpty(f.description?.rawJSON),
+            descriptionText: descriptionPlain,
+            descriptionADF: descriptionData,
             status: f.status,
             priority: f.priority ?? JiraPriority(name: "Unprioritised"),
             assignee: f.assignee,
