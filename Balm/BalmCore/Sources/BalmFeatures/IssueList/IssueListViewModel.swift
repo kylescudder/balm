@@ -13,12 +13,26 @@ public final class IssueListViewModel {
         case failed(String)
     }
 
+    public enum SearchState: Equatable, Sendable {
+        case idle
+        case searching
+        case loaded
+        case failed(String)
+    }
+
     public let project: JiraProject
     public private(set) var issues: [JiraIssue] = []
     public private(set) var availableSprints: [JiraSprint] = []
     public private(set) var selectedSprintIDs: Set<String> = []
     public private(set) var userDefinition: FilterDefinition = .empty
     public private(set) var loadState: LoadState = .idle
+
+    /// Instance-wide search hits for the current search term — issues that match
+    /// the query regardless of project, sprint, or filter scope, so a ticket
+    /// that isn't in the loaded view still surfaces. Populated by `search`, shown
+    /// under a "More results" divider (minus anything already in view).
+    public private(set) var globalResults: [JiraIssue] = []
+    public private(set) var searchState: SearchState = .idle
 
     /// Dropdown pools for the filter sheet. Derived from the issues in the
     /// current sprint context *before* user filters are applied, so the menus
@@ -87,6 +101,10 @@ public final class IssueListViewModel {
     private let api: JiraClient
     private let toaster: Toaster?
     private var loadTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    /// The trimmed query `globalResults` were fetched for — used to detect when
+    /// the live text has moved on and the committed results are stale.
+    private var committedQuery: String?
 
     public init(project: JiraProject, api: JiraClient, toaster: Toaster? = nil) {
         self.project = project
@@ -366,6 +384,54 @@ public final class IssueListViewModel {
             return false
         }
         return walk(group)
+    }
+
+    /// Run an instance-wide search for `query` (title / body / comments / exact
+    /// key) and publish the hits to `globalResults`. Independent of the sprint
+    /// and filter scope, so it surfaces matches that aren't in the loaded view.
+    /// A blank query clears any prior results.
+    public func search(_ query: String) async {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { clearSearch(); return }
+        committedQuery = trimmed
+        searchState = .searching
+        let task: Task<Void, Never> = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let results = try await self.api.searchIssues(matching: trimmed)
+                if Task.isCancelled { return }
+                self.globalResults = results
+                self.searchState = .loaded
+            } catch is CancellationError {
+                return
+            } catch {
+                if Task.isCancelled { return }
+                self.searchState = .failed(error.localizedDescription)
+            }
+        }
+        searchTask = task
+        await task.value
+    }
+
+    /// Drop the committed results when the live query no longer matches the term
+    /// they were fetched for, so a newer term never shows stale instance-wide
+    /// hits (or leaves them up after a failed direct-key lookup). A no-op while
+    /// idle or while the query is unchanged.
+    public func invalidateSearchIfQueryChanged(_ query: String) {
+        guard searchState != .idle else { return }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != committedQuery { clearSearch() }
+    }
+
+    /// Drop any global search results and reset the search UI to idle — called
+    /// when the search field is emptied or dismissed.
+    public func clearSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        committedQuery = nil
+        globalResults = []
+        searchState = .idle
     }
 
     /// Fetch a single issue by key for the ⌘K go-to-ticket flow — works even
