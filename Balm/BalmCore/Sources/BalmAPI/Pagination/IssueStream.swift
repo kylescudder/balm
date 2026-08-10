@@ -14,22 +14,7 @@ public extension JiraClient {
             let task = Task {
                 // Ensure the tenant's Sprint and Instance custom fields are requested
                 // (their ids vary per site).
-                var effectiveFields = fields
-                if let sprintField = await resolveSprintFieldID(),
-                   !effectiveFields.contains(sprintField) {
-                    effectiveFields.append(sprintField)
-                }
-                let instanceField = await resolveInstanceFieldID()
-                if let instanceField {
-                    if !effectiveFields.contains(instanceField) {
-                        effectiveFields.append(instanceField)
-                    }
-                } else {
-                    // Field ID unknown — request all fields so the instance value is
-                    // present in the response. The field ID will be discovered from
-                    // expand=names and cached for subsequent calls.
-                    effectiveFields = ["*all"]
-                }
+                let (effectiveFields, fallbackInstanceField) = await searchFields(base: fields)
                 var token: String? = nil
                 repeat {
                     do {
@@ -40,19 +25,7 @@ public extension JiraClient {
                             maxResults: pageSize
                         )
                         let page = try await send(endpoint)
-                        // Discover the instance field ID from expand=names and cache
-                        // it so subsequent issueStream calls use the efficient field list.
-                        let pageInstanceField: String?
-                        if let discovered = page.names?.first(where: {
-                            $0.value.localizedCaseInsensitiveContains("Instance")
-                        })?.key {
-                            seedInstanceFieldID(discovered)
-                            pageInstanceField = discovered
-                        } else {
-                            pageInstanceField = instanceField
-                        }
-                        let mapped = page.issues.map { JiraIssueMapper.issue(from: $0, instanceFieldID: pageInstanceField) }
-                        continuation.yield(mapped)
+                        continuation.yield(mapSearchPage(page, fallbackInstanceField: fallbackInstanceField))
                         if let nextToken = page.nextPageToken, page.isLast != true {
                             token = nextToken
                         } else {
@@ -110,5 +83,59 @@ public extension JiraClient {
         )
         guard let jql = builder.build() else { throw JiraError.missingSprint }
         return try await issues(jql: jql)
+    }
+
+    /// Global, instance-wide free-text search matching title, body, comments and
+    /// an exact issue key — see `IssueSearchJQL`. Unlike `issues(jql:)` this
+    /// fetches only the first page (capped at `limit`), because an unscoped
+    /// search can match thousands of issues and the caller only shows a handful.
+    /// Returns `[]` for a blank query.
+    func searchIssues(matching query: String, limit: Int = 50) async throws -> [JiraIssue] {
+        guard let jql = IssueSearchJQL.make(query: query) else { return [] }
+        let (effectiveFields, fallbackInstanceField) = await searchFields(base: JiraIssue.defaultFields)
+        let page = try await send(IssueEndpoints.Search(jql: jql, fields: effectiveFields, maxResults: limit))
+        return mapSearchPage(page, fallbackInstanceField: fallbackInstanceField)
+    }
+}
+
+extension JiraClient {
+    /// Resolve the field list to request for a search: the caller's `base` plus
+    /// this tenant's Sprint and Instance custom-field ids. When the Instance
+    /// field id isn't known yet, fall back to `*all` so its value is present in
+    /// the response (the id is then discovered from `expand=names` and cached).
+    /// Returns the fields to request and the resolved instance field id (if any).
+    func searchFields(base: [String]) async -> (fields: [String], instanceField: String?) {
+        var effectiveFields = base
+        if let sprintField = await resolveSprintFieldID(),
+           !effectiveFields.contains(sprintField) {
+            effectiveFields.append(sprintField)
+        }
+        let instanceField = await resolveInstanceFieldID()
+        if let instanceField {
+            if !effectiveFields.contains(instanceField) {
+                effectiveFields.append(instanceField)
+            }
+        } else {
+            effectiveFields = ["*all"]
+        }
+        return (effectiveFields, instanceField)
+    }
+
+    /// Map a search page to domain issues, discovering and caching the Instance
+    /// field id from `expand=names` when it wasn't known up front.
+    func mapSearchPage(
+        _ page: IssueEndpoints.Search.PagedResponse,
+        fallbackInstanceField: String?
+    ) -> [JiraIssue] {
+        let pageInstanceField: String?
+        if let discovered = page.names?.first(where: {
+            $0.value.localizedCaseInsensitiveContains("Instance")
+        })?.key {
+            seedInstanceFieldID(discovered)
+            pageInstanceField = discovered
+        } else {
+            pageInstanceField = fallbackInstanceField
+        }
+        return page.issues.map { JiraIssueMapper.issue(from: $0, instanceFieldID: pageInstanceField) }
     }
 }

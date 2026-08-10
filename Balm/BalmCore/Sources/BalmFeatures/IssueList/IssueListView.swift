@@ -163,26 +163,40 @@ public struct IssueListView: View {
     @ViewBuilder
     private var mainContent: some View {
         Group {
-            switch model.loadState {
-            case .idle:
-                centred(ProgressView("Loading issues…"))
-            case .loading where model.issues.isEmpty:
-                centred(ProgressView("Loading issues…"))
-            case .failed(let message):
-                centred(Text(message).foregroundStyle(theme.palette.destructive))
-            case .loaded where model.issues.isEmpty:
-                centred(emptyState)
-            default:
-                content
+            if model.searchState != .idle {
+                // A global search has been committed — the content area becomes a
+                // native search-results presentation, taking over from the
+                // board/list (and any load/empty state) until the field clears.
+                searchResults
+            } else {
+                switch model.loadState {
+                case .idle:
+                    centred(ProgressView("Loading issues…"))
+                case .loading where model.issues.isEmpty:
+                    centred(ProgressView("Loading issues…"))
+                case .failed(let message):
+                    centred(Text(message).foregroundStyle(theme.palette.destructive))
+                case .loaded where model.issues.isEmpty:
+                    centred(emptyState)
+                default:
+                    content
+                }
             }
         }
         .navigationTitle(model.project.name)
-        .searchable(text: $searchText, isPresented: $searchPresented, prompt: "Filter issues in view")
+        .searchable(text: $searchText, isPresented: $searchPresented, prompt: "Filter in view · ↵ searches everywhere")
         .onSubmit(of: .search) {
             // ⌘K → type a key → Enter jumps straight to that ticket (even if
-            // it isn't in the current view). Anything that isn't a key just
-            // ends the search session with the in-view filter still applied.
-            Task { await openTypedIssue() }
+            // it isn't in the current view). Any other term runs an
+            // instance-wide search whose hits show under "More results".
+            Task { await submitSearch() }
+        }
+        .onChange(of: searchText) { _, next in
+            // Emptying the field drops the global results and restores the
+            // plain sprint/filter list.
+            if next.trimmingCharacters(in: .whitespaces).isEmpty {
+                model.clearSearch()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .balmSearchRequested)) { _ in
             // Cmd+K focuses the inline filter rather than opening a modal.
@@ -316,47 +330,48 @@ public struct IssueListView: View {
         showingFiltersSheet.toggle()
     }
 
-    /// Resolve the search text to an issue key and open it. Bare numbers are
-    /// prefixed with the current project key (so "123" → "PROJ-123"). Text
-    /// that isn't a key is left as a plain in-view filter.
-    private func openTypedIssue() async {
+    /// Handle ↵ in the search bar. A term that resolves to an issue key (a full
+    /// `PROJ-123`, or a bare number assumed to be the current project) jumps
+    /// straight to that ticket. Anything else runs an instance-wide search whose
+    /// hits render under "More results".
+    private func submitSearch() async {
         let raw = searchText.trimmingCharacters(in: .whitespaces)
         guard !raw.isEmpty else { searchPresented = false; return }
-        guard let key = normalisedIssueKey(raw) else {
-            searchPresented = false
+        if let key = IssueKey.normalise(raw, projectKey: model.project.key) {
+            if let issue = await model.fetchIssue(key: key) {
+                selection = issue
+                searchText = ""
+                searchPresented = false
+            }
             return
         }
-        if let issue = await model.fetchIssue(key: key) {
-            selection = issue
-            searchText = ""
-            searchPresented = false
-        }
+        await model.search(raw)
     }
 
-    private func normalisedIssueKey(_ text: String) -> String? {
-        let upper = text.uppercased()
-        if upper.contains("-") {
-            // Full PROJ-123 shape.
-            let isKey = upper.range(of: #"^[A-Z][A-Z0-9]+-\d+$"#, options: .regularExpression) != nil
-            return isKey ? upper : nil
-        }
-        // Bare number → assume the current project.
-        if upper.range(of: #"^\d+$"#, options: .regularExpression) != nil {
-            return "\(model.project.key)-\(upper)"
-        }
-        return nil
-    }
-
-    /// Issues matching the live search text (key or summary). Empty query =
-    /// everything currently loaded.
+    /// Issues in the loaded view matching the live search text — key, title, or
+    /// body. Empty query = everything currently loaded. This is the instant,
+    /// no-network filter; ↵ then reaches beyond the view via `model.search`.
     private var filteredIssues: [JiraIssue] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return model.issues }
         return model.issues.filter {
-            $0.key.lowercased().contains(q) || $0.summary.lowercased().contains(q)
+            $0.key.lowercased().contains(q)
+                || $0.summary.lowercased().contains(q)
+                || ($0.descriptionText?.lowercased().contains(q) ?? false)
         }
     }
 
+    /// Global search hits that aren't already in the in-view list, deduped by
+    /// key — the "More results" set.
+    private var globalExtras: [JiraIssue] {
+        guard !model.globalResults.isEmpty else { return [] }
+        let localKeys = Set(filteredIssues.map(\.key))
+        return model.globalResults.filter { !localKeys.contains($0.key) }
+    }
+
+    /// Board columns for the in-view (locally filtered) issues. Global search
+    /// hits never appear here — while a search is committed the whole content
+    /// area switches to `searchResults` instead.
     private var filteredColumns: [BoardColumn] {
         IssueListViewModel.columns(from: filteredIssues)
     }
@@ -414,6 +429,81 @@ public struct IssueListView: View {
         }
         .animation(.spring(duration: 0.25), value: filteredIssues.map(\.id))
         .refreshable { await model.reloadAwaiting() }
+    }
+
+    // MARK: - Global search results (shared by list & board while searching)
+
+    /// The committed-search presentation: in-view matches and instance-wide hits
+    /// as a native sectioned `List`, with `ContentUnavailableView` for the empty
+    /// and failed states. Replaces the board/list — search is its own mode, not
+    /// a column, so board and list surface out-of-view matches identically.
+    @ViewBuilder
+    private var searchResults: some View {
+        let hasLocal = !filteredIssues.isEmpty
+        switch model.searchState {
+        case .idle:
+            EmptyView()
+        case .searching where !hasLocal:
+            centred(ProgressView("Searching all projects…"))
+        case .failed(let message) where !hasLocal:
+            ContentUnavailableView {
+                Label("Couldn’t search", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(message)
+            }
+        case .loaded where !hasLocal && globalExtras.isEmpty:
+            ContentUnavailableView.search(text: searchText)
+        default:
+            searchResultsList(hasLocal: hasLocal)
+        }
+    }
+
+    private func searchResultsList(hasLocal: Bool) -> some View {
+        List(selection: $selection) {
+            if hasLocal {
+                Section("In current view") {
+                    ForEach(filteredIssues, id: \.self) { issue in
+                        NavigationLink(value: issue) {
+                            IssueRowView(issue: issue)
+                        }
+                        .tag(issue)
+                    }
+                }
+            }
+            moreResultsSection
+        }
+    }
+
+    /// The instance-wide section: hits not already shown in view, plus the
+    /// search's in-flight / error / empty states rendered inline.
+    @ViewBuilder
+    private var moreResultsSection: some View {
+        Section("More results") {
+            switch model.searchState {
+            case .idle:
+                EmptyView()
+            case .searching:
+                HStack(spacing: theme.spacing.s) {
+                    ProgressView().controlSize(.small)
+                    Text("Searching all projects…")
+                        .foregroundStyle(theme.palette.mutedForeground)
+                }
+            case .failed(let message):
+                Text(message).foregroundStyle(theme.palette.destructive)
+            case .loaded:
+                if globalExtras.isEmpty {
+                    Text("No other matches across your projects.")
+                        .foregroundStyle(theme.palette.mutedForeground)
+                } else {
+                    ForEach(globalExtras, id: \.self) { issue in
+                        NavigationLink(value: issue) {
+                            IssueRowView(issue: issue)
+                        }
+                        .tag(issue)
+                    }
+                }
+            }
+        }
     }
 
     /// Post-create: refresh the list so the new ticket is immediately visible,
