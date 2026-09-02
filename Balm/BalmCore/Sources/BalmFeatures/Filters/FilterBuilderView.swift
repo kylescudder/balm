@@ -151,9 +151,15 @@ private struct ConditionRow: View {
         if !op.needsValues { condition.values = [] }
     }
 
-    /// Map a field to its selectable value pool, reusing the same derivation the
-    /// old sectioned sheet used (status labels normalised; named options for
-    /// assignee/reporter/release).
+    static func multiSelectOptions(for field: FilterField, from options: AvailableFilterOptions) -> [MultiSelectOption] {
+        FilterBuilderMultiSelectOptions.multiSelectOptions(for: field, from: options)
+    }
+}
+
+/// Maps a filter field to its selectable value pool, reusing the same derivation
+/// the old sectioned sheet used (status labels normalised; named options for
+/// assignee/reporter/release).
+enum FilterBuilderMultiSelectOptions {
     static func multiSelectOptions(for field: FilterField, from options: AvailableFilterOptions) -> [MultiSelectOption] {
         switch field {
         case .status:

@@ -38,7 +38,11 @@ public final class IssueListViewModel {
     /// current sprint context *before* user filters are applied, so the menus
     /// keep offering every value (you can widen a filter without clearing it).
     public private(set) var filterOptions: AvailableFilterOptions = .empty
-    /// The sprint set `filterOptions` was last built for — lets us skip the
+    /// The unfiltered sprint-wide pool. `filterOptions` is this unioned with the
+    /// values on the currently loaded issues, so the menus never drop a value
+    /// that is visibly on the board.
+    private var unfilteredOptions: AvailableFilterOptions = .empty
+    /// The sprint set `unfilteredOptions` was last built for — lets us skip the
     /// extra unfiltered fetch when only the user filters changed.
     private var filterOptionsSprints: Set<String>?
 
@@ -234,6 +238,7 @@ public final class IssueListViewModel {
             if showLoading || issues.isEmpty {
                 issues = []
                 filterOptions = .empty
+                unfilteredOptions = .empty
                 filterOptionsSprints = nil
                 loadState = .loaded
             }
@@ -283,29 +288,41 @@ public final class IssueListViewModel {
     /// that context, so we derive directly. Otherwise we make one extra fetch
     /// scoped to sprints only — but just once per sprint set, not per filter
     /// change.
+    ///
+    /// That snapshot is then unioned with the values on the currently loaded
+    /// issues. The extra fetch is throttled by sprint set, so the snapshot can
+    /// predate the data on screen — a status first reached mid-sprint would
+    /// otherwise be missing from the Status menu while its column sits on the
+    /// board. The union keeps anything visible selectable.
     private func updateFilterOptions(sprintNames: [String]) async {
         await loadProjectMetadataIfNeeded()
         let key = Set(sprintNames)
+
         if userDefinition.isEmpty {
-            filterOptions = AvailableFilterOptions.from(
-                issues,
-                extraComponents: projectComponentNames,
-                extraReleases: projectVersions,
-                extraInstanceNames: projectInstanceNames
-            )
+            unfilteredOptions = makeFilterOptions(from: issues)
             filterOptionsSprints = key
-            return
-        }
-        guard filterOptionsSprints != key else { return }
-        if let all = try? await api.issues(projectKey: project.key, sprints: sprintNames, definition: .empty) {
-            filterOptions = AvailableFilterOptions.from(
-                all,
-                extraComponents: projectComponentNames,
-                extraReleases: projectVersions,
-                extraInstanceNames: projectInstanceNames
-            )
+        } else if filterOptionsSprints != key,
+                  let all = try? await api.issues(
+                      projectKey: project.key,
+                      sprints: sprintNames,
+                      definition: .empty
+                  ) {
+            unfilteredOptions = makeFilterOptions(from: all)
             filterOptionsSprints = key
         }
+
+        filterOptions = unfilteredOptions.merging(makeFilterOptions(from: issues))
+    }
+
+    /// Derive a pool from `source`, folding in the project-level component,
+    /// version, and instance lists resolved from metadata.
+    private func makeFilterOptions(from source: [JiraIssue]) -> AvailableFilterOptions {
+        AvailableFilterOptions.from(
+            source,
+            extraComponents: projectComponentNames,
+            extraReleases: projectVersions,
+            extraInstanceNames: projectInstanceNames
+        )
     }
 
     /// Resolve, once and best-effort, the project's version list (for the

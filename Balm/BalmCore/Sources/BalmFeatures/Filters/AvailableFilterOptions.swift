@@ -112,6 +112,38 @@ public struct AvailableFilterOptions: Sendable, Equatable {
         )
     }
 
+    /// Union this pool with `other`, keeping this value's ordering and appending
+    /// anything only `other` has.
+    ///
+    /// Used to fold the currently-loaded issues into the unfiltered snapshot, so
+    /// a value that is visibly on the board is always selectable in the filter
+    /// menus even when the snapshot predates it (a status reached mid-sprint,
+    /// a newly added label, an assignee who joined the sprint late).
+    public func merging(_ other: AvailableFilterOptions) -> AvailableFilterOptions {
+        AvailableFilterOptions(
+            statuses: Self.unique(statuses + other.statuses),
+            priorities: Self.unique(priorities + other.priorities),
+            issueTypes: Self.unique(issueTypes + other.issueTypes),
+            assignees: Self.mergedNamed(assignees, other.assignees),
+            reporters: Self.mergedNamed(reporters, other.reporters),
+            labels: Self.unique(labels + other.labels),
+            components: Self.unique(components + other.components),
+            releases: Self.mergedNamed(releases, other.releases),
+            instanceNames: Self.unique(instanceNames + other.instanceNames)
+        )
+    }
+
+    /// Dedupe by `id`, preserving `lhs`'s order (so the `UNASSIGNED` /
+    /// `NO_RELEASE` sentinels stay first) and appending `rhs`'s extras.
+    private static func mergedNamed(_ lhs: [NamedOption], _ rhs: [NamedOption]) -> [NamedOption] {
+        var seen = Set<String>()
+        var out: [NamedOption] = []
+        for option in lhs + rhs where seen.insert(option.id).inserted {
+            out.append(option)
+        }
+        return out
+    }
+
     private static func unique(_ values: [String]) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
