@@ -149,6 +149,83 @@ final class AvailableFilterOptionsTests: XCTestCase {
         XCTAssertEqual(AvailableFilterOptions.empty.merging(loaded), loaded)
     }
 
+    // MARK: - Presentation
+
+    /// `filterOptions` is computed off `issues`, so a value introduced by a
+    /// mutation that never runs a load — `applyExternalUpdate` re-bucketing an
+    /// edited card, `refreshAfterCreate` pinning a new issue, `moveIssue`
+    /// optimistically restatusing a dragged card — reaches the menus in the
+    /// same frame it reaches the board.
+    func testPresentedSurfacesAValueIntroducedByAMutationTheSnapshotPredates() {
+        let snapshot = AvailableFilterOptions.from([
+            Self.issue(key: "MP5-1", status: "In Progress")
+        ])
+        let afterDragToDone = AvailableFilterOptions.from([
+            Self.issue(key: "MP5-1", status: "Done")
+        ])
+
+        let presented = AvailableFilterOptions.presented(
+            snapshot: snapshot,
+            loaded: afterDragToDone
+        )
+
+        XCTAssertEqual(presented.statuses, ["Done", "In Progress"])
+    }
+
+    func testPresentedSurfacesAnAssigneeIntroducedByAMutation() {
+        let snapshot = AvailableFilterOptions.from([
+            Self.issue(key: "MP5-1", status: "To Do", assignee: "Kyle Scudder")
+        ])
+        let afterReassign = AvailableFilterOptions.from([
+            Self.issue(key: "MP5-1", status: "To Do", assignee: "Ada Lovelace")
+        ])
+
+        let presented = AvailableFilterOptions.presented(
+            snapshot: snapshot,
+            loaded: afterReassign
+        )
+
+        XCTAssertEqual(
+            presented.assignees.map(\.id),
+            [FilterOptions.unassignedSentinel, "Kyle Scudder", "Ada Lovelace"]
+        )
+    }
+
+    /// Nothing on either side means no sprint is selected or a load is in
+    /// flight. The menus should read "No values", not offer bare sentinels.
+    func testPresentedIsEmptyWhenNothingIsLoaded() {
+        XCTAssertEqual(
+            AvailableFilterOptions.presented(snapshot: .empty, loaded: .empty),
+            .empty
+        )
+    }
+
+    /// A filter matching zero issues still gets the full snapshot, so it can be
+    /// widened again rather than stranding the user with an empty menu.
+    func testPresentedKeepsTheSnapshotWhenTheFilterMatchesNothing() {
+        let snapshot = AvailableFilterOptions.from([
+            Self.issue(key: "MP5-1", status: "Done"),
+            Self.issue(key: "MP5-2", status: "To Do")
+        ])
+
+        let presented = AvailableFilterOptions.presented(snapshot: snapshot, loaded: .empty)
+
+        XCTAssertEqual(presented.statuses, ["Done", "To Do"])
+    }
+
+    /// The snapshot fetch is best-effort; when it fails the loaded issues alone
+    /// must still drive the menus.
+    func testPresentedFallsBackToTheLoadedIssuesWhenTheSnapshotFetchFailed() {
+        let loaded = AvailableFilterOptions.from([
+            Self.issue(key: "MP5-1", status: "Done")
+        ])
+
+        XCTAssertEqual(
+            AvailableFilterOptions.presented(snapshot: .empty, loaded: loaded),
+            loaded
+        )
+    }
+
     // MARK: - Menu labels
 
     /// `merging` works on raw Jira names; the menu normalises for display. A

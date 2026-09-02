@@ -112,6 +112,23 @@ public struct AvailableFilterOptions: Sendable, Equatable {
         )
     }
 
+    /// The pool to present in the filter menus: the unfiltered `snapshot` unioned
+    /// with `loaded` — the values on the issues currently on screen.
+    ///
+    /// The snapshot is refreshed only when the sprint set changes, so it can
+    /// predate what is on the board; folding in `loaded` keeps a visible value
+    /// selectable regardless. Callers pass `.empty` for `loaded` when nothing is
+    /// loaded, so both being empty means no sprint is selected or a load is
+    /// still in flight — the menus should read "No values" rather than offer
+    /// bare `UNASSIGNED` / `NO_RELEASE` sentinels.
+    public static func presented(
+        snapshot: AvailableFilterOptions,
+        loaded: AvailableFilterOptions
+    ) -> AvailableFilterOptions {
+        guard snapshot != .empty || loaded != .empty else { return .empty }
+        return snapshot.merging(loaded)
+    }
+
     /// Union this pool with `other`, keeping this value's ordering and appending
     /// anything only `other` has.
     ///
