@@ -112,6 +112,55 @@ public struct AvailableFilterOptions: Sendable, Equatable {
         )
     }
 
+    /// The pool to present in the filter menus: the unfiltered `snapshot` unioned
+    /// with `loaded` — the values on the issues currently on screen.
+    ///
+    /// The snapshot is refreshed only when the sprint set changes, so it can
+    /// predate what is on the board; folding in `loaded` keeps a visible value
+    /// selectable regardless. Callers pass `.empty` for `loaded` when nothing is
+    /// loaded, so both being empty means no sprint is selected or a load is
+    /// still in flight — the menus should read "No values" rather than offer
+    /// bare `UNASSIGNED` / `NO_RELEASE` sentinels.
+    public static func presented(
+        snapshot: AvailableFilterOptions,
+        loaded: AvailableFilterOptions
+    ) -> AvailableFilterOptions {
+        guard snapshot != .empty || loaded != .empty else { return .empty }
+        return snapshot.merging(loaded)
+    }
+
+    /// Union this pool with `other`, keeping this value's ordering and appending
+    /// anything only `other` has.
+    ///
+    /// Used to fold the currently-loaded issues into the unfiltered snapshot, so
+    /// a value that is visibly on the board is always selectable in the filter
+    /// menus even when the snapshot predates it (a status reached mid-sprint,
+    /// a newly added label, an assignee who joined the sprint late).
+    public func merging(_ other: AvailableFilterOptions) -> AvailableFilterOptions {
+        AvailableFilterOptions(
+            statuses: Self.unique(statuses + other.statuses),
+            priorities: Self.unique(priorities + other.priorities),
+            issueTypes: Self.unique(issueTypes + other.issueTypes),
+            assignees: Self.mergedNamed(assignees, other.assignees),
+            reporters: Self.mergedNamed(reporters, other.reporters),
+            labels: Self.unique(labels + other.labels),
+            components: Self.unique(components + other.components),
+            releases: Self.mergedNamed(releases, other.releases),
+            instanceNames: Self.unique(instanceNames + other.instanceNames)
+        )
+    }
+
+    /// Dedupe by `id`, preserving `lhs`'s order (so the `UNASSIGNED` /
+    /// `NO_RELEASE` sentinels stay first) and appending `rhs`'s extras.
+    private static func mergedNamed(_ lhs: [NamedOption], _ rhs: [NamedOption]) -> [NamedOption] {
+        var seen = Set<String>()
+        var out: [NamedOption] = []
+        for option in lhs + rhs where seen.insert(option.id).inserted {
+            out.append(option)
+        }
+        return out
+    }
+
     private static func unique(_ values: [String]) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
