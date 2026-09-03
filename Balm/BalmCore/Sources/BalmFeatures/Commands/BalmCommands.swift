@@ -9,7 +9,7 @@ public struct BalmCommands: Commands {
             Button("New Issue") {
                 post(.balmCreateIssueRequested)
             }
-            .keyboardShortcut("c", modifiers: [])
+            .keyboardShortcut("n", modifiers: [])
         }
 
         CommandMenu("View") {
@@ -22,7 +22,7 @@ public struct BalmCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command])
             Divider()
             Button("New Issue…") { post(.balmCreateIssueRequested) }
-                .keyboardShortcut("c", modifiers: [])
+                .keyboardShortcut("n", modifiers: [])
         }
 
         CommandMenu("Go") {

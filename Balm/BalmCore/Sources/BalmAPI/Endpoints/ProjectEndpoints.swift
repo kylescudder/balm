@@ -23,6 +23,22 @@ public enum ProjectEndpoints {
         }
     }
 
+    /// Up to 20 projects the signed-in user viewed most recently, most recent
+    /// first. Jira returns a bare array here, not a page.
+    public struct Recent: JiraEndpoint {
+        public typealias Response = [JiraProject]
+        public init() {}
+
+        public func makeRequest(cloudId: String) throws -> URLRequest {
+            try JiraEndpointBuilder.get(
+                host: .rest,
+                cloudId: cloudId,
+                path: "/project/recent",
+                queryItems: []
+            )
+        }
+    }
+
     public struct Boards: JiraEndpoint {
         public struct PagedResponse: Decodable, Sendable {
             public let values: [JiraBoard]

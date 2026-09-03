@@ -7,59 +7,57 @@ struct InboxRowView: View {
     let notification: BalmNotification
 
     var body: some View {
-        HStack(alignment: .top, spacing: theme.spacing.m) {
+        HStack(alignment: .top, spacing: 10) {
             unreadDot
             Image(systemName: symbolName)
-                .foregroundStyle(theme.palette.primary)
-                .frame(width: 20, alignment: .center)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: theme.spacing.xs) {
-                HStack(spacing: theme.spacing.s) {
+                .foregroundStyle(theme.palette.accent)
+                .frame(width: 18, alignment: .center)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 10) {
                     Text(notification.issueKey)
-                        .font(theme.typography.caption.monospaced())
-                        .foregroundStyle(theme.palette.mutedForeground)
+                        .monospacedDigit()
                     Text(kindLabel)
-                        .font(theme.typography.caption)
-                        .foregroundStyle(theme.palette.mutedForeground)
+                        .lineLimit(1)
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 // Unread reads like Mail: bold at full strength; read rows
                 // drop to regular weight (plus the whole-row dim below).
                 Text(notification.issueSummary)
-                    .font(theme.typography.body.weight(notification.isRead ? .regular : .semibold))
-                    .foregroundStyle(theme.palette.foreground)
+                    .font(.body.weight(notification.isRead ? .regular : .semibold))
                     .lineLimit(2)
                 if let excerpt = excerptText {
                     Text(excerpt)
-                        .font(theme.typography.callout)
-                        .foregroundStyle(theme.palette.mutedForeground)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                HStack(spacing: theme.spacing.xs) {
+                HStack(spacing: 8) {
                     if let actor = notification.actorDisplayName {
                         Text(actor)
-                            .font(theme.typography.caption.weight(.semibold))
-                            .foregroundStyle(theme.palette.foreground)
-                        Text("·")
-                            .foregroundStyle(theme.palette.mutedForeground)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
                     }
                     Text(timestampLabel)
-                        .font(theme.typography.caption)
-                        .foregroundStyle(theme.palette.mutedForeground)
+                        .foregroundStyle(.secondary)
                 }
+                .font(.caption)
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, theme.spacing.xs)
-        .opacity(notification.isRead ? 0.65 : 1.0)
+        .padding(.vertical, 4)
+        .opacity(notification.isRead ? 0.7 : 1.0)
+        .accessibilityElement(children: .combine)
     }
 
-    /// Mirrors `BoardColumnView`'s status dot — a filled 8pt circle marks
-    /// unread, an invisible one keeps read rows aligned to the same inset.
+    /// A filled 8 pt dot marks unread; an invisible one keeps read rows aligned.
     private var unreadDot: some View {
         Circle()
-            .fill(notification.isRead ? Color.clear : theme.palette.primary)
+            .fill(notification.isRead ? Color.clear : theme.palette.accent)
             .frame(width: 8, height: 8)
-            .padding(.top, 6)
+            .padding(.top, 5)
+            .accessibilityLabel(notification.isRead ? "" : "Unread")
     }
 
     private var symbolName: String {
@@ -77,8 +75,10 @@ struct InboxRowView: View {
         case .assignedToYou:
             return "Assigned to you"
         case .statusChanged(let from, let to):
-            if let from, let to { return "\(from) → \(to)" }
-            if let to { return "Moved to \(to)" }
+            if let from, let to {
+                return "\(StatusNormaliser.normalise(from)) to \(StatusNormaliser.normalise(to))"
+            }
+            if let to { return "Moved to \(StatusNormaliser.normalise(to))" }
             return "Status changed"
         case .commented:
             return "New comment"
