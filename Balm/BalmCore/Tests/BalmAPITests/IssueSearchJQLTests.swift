@@ -25,7 +25,30 @@ final class IssueSearchJQLTests: XCTestCase {
     func testFullKeyAlsoMatchesIssueKey() {
         XCTAssertEqual(
             IssueSearchJQL.make(query: "abc-123"),
-            #"(issuekey = ABC-123 OR text ~ "abc-123*") order by updated DESC"#
+            #"(issuekey = ABC-123 OR text ~ "abc 123*") order by updated DESC"#
+        )
+    }
+
+    func testPunctuationIsDroppedSoLuceneCannotChokeOnIt() {
+        XCTAssertEqual(
+            IssueSearchJQL.make(query: "SAPI >"),
+            #"text ~ "SAPI*" order by updated DESC"#
+        )
+        XCTAssertEqual(
+            IssueSearchJQL.make(query: "Odyssey > Job Search > (restore)"),
+            #"text ~ "Odyssey Job Search restore*" order by updated DESC"#
+        )
+        XCTAssertNil(IssueSearchJQL.make(query: ">>> ()"))
+    }
+
+    func testSingleCharactersDropOutWhenLongerTermsExist() {
+        XCTAssertEqual(
+            IssueSearchJQL.make(query: "won't fix"),
+            #"text ~ "won fix*" order by updated DESC"#
+        )
+        XCTAssertEqual(
+            IssueSearchJQL.make(query: "x"),
+            #"text ~ "x*" order by updated DESC"#
         )
     }
 
@@ -38,10 +61,10 @@ final class IssueSearchJQLTests: XCTestCase {
         )
     }
 
-    func testQuotesAndBackslashesAreEscaped() {
+    func testQuotesAndBackslashesNeverReachTheQuery() {
         XCTAssertEqual(
             IssueSearchJQL.make(query: #"say "hi" \now"#),
-            #"text ~ "say \"hi\" \\now*" order by updated DESC"#
+            #"text ~ "say hi now*" order by updated DESC"#
         )
     }
 }
