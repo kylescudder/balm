@@ -25,7 +25,7 @@ public struct LoginView: View {
                     .accessibilityHidden(true)
                 Text("Balm.")
                     .font(theme.typography.wordmark)
-                Text("Jira, one key away.")
+                Text("Jira, with room to think.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
