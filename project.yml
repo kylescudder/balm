@@ -38,6 +38,10 @@ targets:
           - BalmCore
     settings:
       base:
+        # Pinned at target level so xcodegen never auto-detects a stray
+        # Info.plist (e.g. inside Balm/BalmCore/.build after `swift build`)
+        # and demotes the real one to a copied resource.
+        INFOPLIST_FILE: Balm/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
