@@ -15,6 +15,10 @@ struct ScopeBar: View {
     var statusText: String? = nil
     let onOpenFilters: () -> Void
 
+    /// Sprint toggles are staged here while the picker is open and committed
+    /// once when it closes, so picking three sprints is one reload, not three.
+    @State private var sprintDraft: [String]?
+
     var body: some View {
         HStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -87,15 +91,29 @@ struct ScopeBar: View {
             shortcutModifiers: .shift,
             bordered: true,
             emptyLabel: "No sprint",
-            summaryNoun: "sprints"
+            summaryNoun: "sprints",
+            onDismiss: commitSprintDraft
         )
+    }
+
+    private var committedSprints: [String] {
+        model.availableSprints.map(\.name).filter { model.selectedSprintIDs.contains($0) }
     }
 
     private var sprintSelection: Binding<[String]> {
         Binding(
-            get: { model.availableSprints.map(\.name).filter { model.selectedSprintIDs.contains($0) } },
-            set: { model.setSprintSelection(Set($0)) }
+            get: { sprintDraft ?? committedSprints },
+            set: { sprintDraft = $0 }
         )
+    }
+
+    private func commitSprintDraft() {
+        guard let draft = sprintDraft else { return }
+        sprintDraft = nil
+        let next = Set(draft)
+        if next != model.selectedSprintIDs {
+            model.setSprintSelection(next)
+        }
     }
 
     #if !os(macOS)

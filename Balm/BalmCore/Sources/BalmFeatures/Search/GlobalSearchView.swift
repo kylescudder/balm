@@ -20,6 +20,27 @@ struct GlobalSearchView: View {
     }
 
     var body: some View {
+        NavigationStack(path: $path) {
+            results
+                .navigationTitle("Search")
+                .navigationDestination(for: JiraIssue.self) { issue in
+                    IssueDetailView(issue: issue)
+                }
+                .searchable(text: $query, prompt: "Search issues")
+                .onSubmit(of: .search) {
+                    Task { await submit() }
+                }
+                .onChange(of: query) { _, next in
+                    model.invalidateSearchIfQueryChanged(next)
+                }
+                .task {
+                    model = IssueListViewModel(project: project, api: env.api, toaster: env.toaster)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var results: some View {
         Group {
             switch model.searchState {
             case .idle:
@@ -49,20 +70,6 @@ struct GlobalSearchView: View {
                     .listStyle(.insetGrouped)
                 }
             }
-        }
-        .navigationTitle("Search")
-        .navigationDestination(for: JiraIssue.self) { issue in
-            IssueDetailView(issue: issue)
-        }
-        .searchable(text: $query, prompt: "Search issues")
-        .onSubmit(of: .search) {
-            Task { await submit() }
-        }
-        .onChange(of: query) { _, next in
-            model.invalidateSearchIfQueryChanged(next)
-        }
-        .task {
-            model = IssueListViewModel(project: project, api: env.api, toaster: env.toaster)
         }
     }
 

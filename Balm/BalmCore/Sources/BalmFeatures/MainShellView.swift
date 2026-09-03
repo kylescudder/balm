@@ -205,7 +205,7 @@ public struct MainShellView: View {
         } detail: {
             NavigationStack {
                 if sidebarSelection == .inbox {
-                    InboxListView(onOpen: open)
+                    InboxListView(openedIssueKey: selectedIssue?.key, onOpen: open)
                 } else {
                     IssueListView(
                         project: project,
@@ -297,9 +297,7 @@ public struct MainShellView: View {
             }
             .badge(env.inboxStore.unreadCount)
             Tab(value: AppTab.search, role: .search) {
-                NavigationStack {
-                    GlobalSearchView(project: project)
-                }
+                GlobalSearchView(project: project)
             }
 
             TabSection("Projects") {
@@ -362,7 +360,7 @@ public struct MainShellView: View {
 
     private var inboxTab: some View {
         NavigationSplitView {
-            InboxListView(onOpen: { inboxIssue = $0 })
+            InboxListView(openedIssueKey: inboxIssue?.key, onOpen: { inboxIssue = $0 })
         } detail: {
             if let issue = inboxIssue {
                 IssueDetailView(issue: issue)

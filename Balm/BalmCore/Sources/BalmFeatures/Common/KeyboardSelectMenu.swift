@@ -41,6 +41,9 @@ struct KeyboardMultiSelect: View {
     var emptyLabel = "Any"
     /// Plural noun for the "N selected" summary, e.g. "sprints" → "2 sprints".
     var summaryNoun: String? = nil
+    /// Called when the popover or sheet closes, so a caller staging edits can
+    /// commit them once rather than on every toggle.
+    var onDismiss: (() -> Void)? = nil
 
     @State private var isPresented = false
 
@@ -57,6 +60,9 @@ struct KeyboardMultiSelect: View {
         }
         .fixedSize()
         .keyboardShortcutIfPresent(shortcut, modifiers: shortcutModifiers)
+        .onChange(of: isPresented) { _, presented in
+            if !presented { onDismiss?() }
+        }
         #if os(macOS)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             NativeMultiSelectPopover(title: title, options: options, selection: $selection)

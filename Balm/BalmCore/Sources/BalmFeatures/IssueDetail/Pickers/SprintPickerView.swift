@@ -86,10 +86,7 @@ struct SprintPickerView: View {
                 sprints = []
                 return
             }
-            let resp = try await env.api.send(
-                ProjectEndpoints.Sprints(boardID: board.id, states: ["active", "future"])
-            )
-            sprints = resp.values
+            sprints = try await env.api.allSprints(boardID: board.id, states: ["active", "future"])
         } catch {
             env.toaster.report(error, "Couldn't load sprints")
         }

@@ -10,6 +10,10 @@ import BalmDesignSystem
 public struct InboxListView: View {
     @Environment(AppEnvironment.self) private var env
 
+    /// The key currently shown in the inspector or detail column, if any. When
+    /// it goes nil the row highlight is released so the same notification can
+    /// be opened again.
+    private let openedIssueKey: String?
     private let onOpen: (JiraIssue) -> Void
 
     // Keyed on id, not the whole value: `BalmNotification`'s `Hashable`
@@ -23,7 +27,8 @@ public struct InboxListView: View {
     @State private var isOpening = false
     @State private var showUnreadOnly = false
 
-    public init(onOpen: @escaping (JiraIssue) -> Void) {
+    public init(openedIssueKey: String? = nil, onOpen: @escaping (JiraIssue) -> Void) {
+        self.openedIssueKey = openedIssueKey
         self.onOpen = onOpen
     }
 
@@ -58,6 +63,9 @@ public struct InboxListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.bar)
             }
+        }
+        .onChange(of: openedIssueKey) { _, key in
+            if key == nil { selection = nil }
         }
         .onChange(of: selection) { _, newValue in
             activateTask?.cancel()
@@ -147,7 +155,11 @@ public struct InboxListView: View {
         let issue = await fetchIssue(key: notification.issueKey)
         guard !Task.isCancelled, selection == notification.id else { return }
         isOpening = false
-        guard let issue else { return }
+        guard let issue else {
+            // Release the row so the same notification can be tried again.
+            selection = nil
+            return
+        }
         env.inboxStore.markRead(notification.id)
         onOpen(issue)
     }

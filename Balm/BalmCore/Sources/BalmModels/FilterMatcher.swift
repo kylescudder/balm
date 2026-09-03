@@ -105,7 +105,9 @@ public enum FilterMatcher {
         a.compare(b, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
 
-    /// ISO `yyyy-MM-dd` strings compare correctly as plain strings.
+    /// ISO `yyyy-MM-dd` strings compare correctly as plain strings. `before`
+    /// and `after` are inclusive, because `JQLBuilder` compiles them as `<=`
+    /// and `>=`; the matcher must agree with what Jira actually returned.
     private static func matchesDate(_ raw: String?, _ condition: FilterCondition) -> Bool {
         switch condition.op {
         case .isEmpty: return raw == nil
@@ -115,10 +117,10 @@ public enum FilterMatcher {
             return raw == value
         case .before:
             guard let raw, let value = condition.values.first else { return false }
-            return raw < value
+            return raw <= value
         case .after:
             guard let raw, let value = condition.values.first else { return false }
-            return raw > value
+            return raw >= value
         case .isAnyOf:
             guard let raw else { return false }
             return condition.values.contains(raw)

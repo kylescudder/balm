@@ -153,11 +153,11 @@ public final class IssueListViewModel {
                 }
                 return
             }
-            let sprintsResponse: ProjectEndpoints.Sprints.PagedResponse
+            let sprints: [JiraSprint]
             do {
-                sprintsResponse = try await api.send(
-                    ProjectEndpoints.Sprints(boardID: board.id, states: ["active", "future"])
-                )
+                // Every page: reconciling the remembered selection against a
+                // partial list would drop a live sprint that sits past page one.
+                sprints = try await api.allSprints(boardID: board.id, states: ["active", "future"])
             } catch {
                 if error.isCancellation { return }
                 // Kanban boards have no sprints (`/sprint` returns 400). That's
@@ -166,17 +166,17 @@ public final class IssueListViewModel {
                 useBacklogOnly()
                 return
             }
-            availableSprints = [JiraSprint.backlog] + sprintsResponse.values
+            availableSprints = [JiraSprint.backlog] + sprints
             dropFinishedSprintsFromSelection()
 
             // Default selection: prefer active sprints; fall back to all
             // future sprints; fall back to backlog so the user sees something
             // on first load. Persisted selection (when present) takes precedence.
             if selectedSprintIDs.isEmpty {
-                let active = sprintsResponse.values
+                let active = sprints
                     .filter { $0.state.uppercased() == "ACTIVE" }
                     .map(\.name)
-                let future = sprintsResponse.values
+                let future = sprints
                     .filter { $0.state.uppercased() == "FUTURE" }
                     .map(\.name)
                 if !active.isEmpty {

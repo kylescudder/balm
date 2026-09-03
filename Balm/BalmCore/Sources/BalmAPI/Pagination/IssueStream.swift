@@ -139,3 +139,20 @@ extension JiraClient {
         return page.issues.map { JiraIssueMapper.issue(from: $0, instanceFieldID: pageInstanceField) }
     }
 }
+
+public extension JiraClient {
+    /// Every sprint on a board in the given states, following `isLast` so a
+    /// board with more than one page of sprints is never mistaken for a board
+    /// whose later sprints have finished.
+    func allSprints(boardID: Int, states: [String]) async throws -> [JiraSprint] {
+        var sprints: [JiraSprint] = []
+        var startAt = 0
+        while true {
+            let page = try await send(ProjectEndpoints.Sprints(boardID: boardID, states: states, startAt: startAt))
+            sprints.append(contentsOf: page.values)
+            if page.isLast ?? true || page.values.isEmpty { break }
+            startAt += page.values.count
+        }
+        return sprints
+    }
+}

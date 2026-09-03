@@ -57,11 +57,14 @@ final class FilterMatcherTests: XCTestCase {
         XCTAssertTrue(FilterMatcher.matches(issue(fixVersions: []), condition: cond(.release, .isAnyOf, [JiraVersion.noReleaseSentinel])))
     }
 
-    func testDueDateOperators() {
+    func testDueDateOperatorsAreInclusiveLikeTheJQLBuilder() {
         let due = issue(dueDate: "2026-09-12")
         XCTAssertTrue(FilterMatcher.matches(due, condition: cond(.dueDate, .before, ["2026-09-30"])))
+        XCTAssertTrue(FilterMatcher.matches(due, condition: cond(.dueDate, .before, ["2026-09-12"])))
         XCTAssertFalse(FilterMatcher.matches(due, condition: cond(.dueDate, .before, ["2026-09-01"])))
         XCTAssertTrue(FilterMatcher.matches(due, condition: cond(.dueDate, .after, ["2026-09-01"])))
+        XCTAssertTrue(FilterMatcher.matches(due, condition: cond(.dueDate, .after, ["2026-09-12"])))
+        XCTAssertFalse(FilterMatcher.matches(due, condition: cond(.dueDate, .after, ["2026-09-13"])))
         XCTAssertTrue(FilterMatcher.matches(due, condition: cond(.dueDate, .on, ["2026-09-12"])))
         XCTAssertTrue(FilterMatcher.matches(issue(), condition: cond(.dueDate, .isEmpty)))
     }
