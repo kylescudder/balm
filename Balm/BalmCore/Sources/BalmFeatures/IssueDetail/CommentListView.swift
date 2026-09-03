@@ -13,6 +13,8 @@ struct CommentListView: View {
     @Environment(\.balmTheme) private var theme
     @Environment(AppEnvironment.self) private var env
     @Bindable var model: IssueDetailViewModel
+    /// Bumped by the detail view when C is pressed; focuses the composer.
+    var focusRequest: Int = 0
     private let renderer = ADFRenderer()
 
     @State private var draft = NSAttributedString(string: "")
@@ -28,11 +30,11 @@ struct CommentListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.spacing.l) {
-            SectionHeading("Comments (\(model.details.comments.count))")
+            SectionHeading("Comments", count: model.details.comments.count)
             if model.details.comments.isEmpty {
                 Text("No comments yet.")
-                    .font(theme.typography.callout)
-                    .foregroundStyle(theme.palette.mutedForeground)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             } else {
                 ForEach(model.details.comments) { comment in
                     CommentRow(
@@ -46,11 +48,14 @@ struct CommentListView: View {
                         onDelete: { pendingDelete = comment }
                     )
                     if comment.id != model.details.comments.last?.id {
-                        Divider().background(theme.palette.border)
+                        Divider()
                     }
                 }
             }
             composer
+        }
+        .onChange(of: focusRequest) { _, _ in
+            mentionController.focus()
         }
         .confirmationDialog(
             "Delete this comment?",
@@ -85,12 +90,12 @@ struct CommentListView: View {
                     Label("Paste image", systemImage: "photo.on.rectangle")
                 }
                 .buttonStyle(.borderless)
-                .help("Paste an image from the clipboard — or just ⌘V / drag one in")
-                Button("Post Comment") { postComment() }
+                .help("Paste an image from the clipboard. ⌘V or dragging one in works too.")
+                Button("Post comment") { postComment() }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canPost)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .help("Post comment — ⌘↩")
+                    .help("Post comment (⌘↩)")
             }
         }
     }
@@ -108,13 +113,13 @@ struct CommentListView: View {
         )
         .frame(height: 88)
         .padding(theme.spacing.xs)
-        .background(theme.palette.card)
+        .background(BalmSurface.card)
         .overlay(
-            RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous)
-                .strokeBorder(isDropTargeted ? theme.palette.accent : theme.palette.border,
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.25),
                               lineWidth: isDropTargeted ? 2 : 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(alignment: .topLeading) {
             if suggestionsActive, let anchor = mentionQuery?.anchor {
                 mentionSuggestions
@@ -132,24 +137,22 @@ struct CommentListView: View {
                 HStack(spacing: theme.spacing.s) {
                     AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 22)
                     Text(user.displayName)
-                        .font(theme.typography.body)
-                        .foregroundStyle(theme.palette.foreground)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, theme.spacing.s)
                 .padding(.vertical, 5)
-                .background(index == highlightedIndex ? theme.palette.accent.opacity(0.18) : .clear)
+                .background(index == highlightedIndex ? Color.accentColor.opacity(0.18) : .clear)
                 .contentShape(Rectangle())
                 .onTapGesture { mentionController.insert(user) }
             }
         }
         .frame(width: 260, alignment: .leading)
         .padding(.vertical, 4)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous)
-                .strokeBorder(theme.palette.border)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.quaternary)
         )
         .shadow(radius: 10, y: 4)
     }
@@ -281,11 +284,10 @@ private struct CommentRow: View {
                 AvatarView(name: comment.author.displayName, avatarURL: comment.author.avatarURL, size: 28)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(comment.author.displayName)
-                        .font(theme.typography.body.weight(.semibold))
-                        .foregroundStyle(theme.palette.foreground)
+                        .font(.body.weight(.semibold))
                     Text(timestampLabel)
-                        .font(theme.typography.caption)
-                        .foregroundStyle(theme.palette.mutedForeground)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if !isEditing && !isOptimistic {
@@ -315,7 +317,7 @@ private struct CommentRow: View {
             Button { copyLink(linkURL) } label: {
                 Image(systemName: copiedLink ? "checkmark" : "link")
                     .font(.caption2)
-                    .foregroundStyle(copiedLink ? AnyShapeStyle(.green) : AnyShapeStyle(theme.palette.mutedForeground))
+                    .foregroundStyle(copiedLink ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
             }
             .buttonStyle(.plain)
             .help("Copy link to this comment")
@@ -356,7 +358,7 @@ private struct CommentRow: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .foregroundStyle(theme.palette.mutedForeground)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, theme.spacing.xs)
         }
         .menuStyle(.borderlessButton)
@@ -369,27 +371,25 @@ private struct CommentRow: View {
             ADFContentView(blocks: blocks, loadsImagesWithJiraAuth: true)
         } else if !comment.body.isEmpty {
             Text(comment.body)
-                .font(theme.typography.body)
-                .foregroundStyle(theme.palette.foreground)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text("(empty)")
-                .font(theme.typography.caption)
-                .foregroundStyle(theme.palette.mutedForeground)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
     private var editor: some View {
         VStack(alignment: .trailing, spacing: theme.spacing.s) {
             TextEditor(text: $draftBody)
-                .font(theme.typography.body)
                 .frame(height: 96)
                 .padding(theme.spacing.s)
                 .overlay(
-                    RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous)
-                        .strokeBorder(theme.palette.border)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.quaternary)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             HStack {
                 Button("Cancel", role: .cancel) { isEditing = false }
                     .buttonStyle(.borderless)
@@ -419,6 +419,6 @@ private struct CommentRow: View {
             guard let updated = comment.updated else { return false }
             return updated.timeIntervalSince(created) > 1.0
         }()
-        return edited ? "\(stamp) · edited" : stamp
+        return edited ? "\(stamp), edited" : stamp
     }
 }

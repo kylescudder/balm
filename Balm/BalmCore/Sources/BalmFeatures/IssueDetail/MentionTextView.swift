@@ -40,9 +40,12 @@ struct MentionQuery: Equatable {
 final class MentionController: ObservableObject {
     fileprivate var perform: ((JiraUser) -> Void)?
     fileprivate var performImage: ((IssueDetailViewModel.PastedImage) -> Void)?
+    fileprivate var performFocus: (() -> Void)?
     func insert(_ user: JiraUser) { perform?(user) }
     /// Insert an inline image at the caret (used by paste / drop / the button).
     func insert(image: IssueDetailViewModel.PastedImage) { performImage?(image) }
+    /// Put the caret in the composer (the C shortcut).
+    func focus() { performFocus?() }
 }
 
 /// The `@`-token under the caret: the range to replace on commit and the query.
@@ -284,6 +287,10 @@ private struct Bridge: NSViewRepresentable {
         let coordinator = context.coordinator
         controller.perform = { [weak coordinator] user in coordinator?.insertMention(user) }
         controller.performImage = { [weak coordinator] image in coordinator?.insertImage(image) }
+        controller.performFocus = { [weak textView] in
+            guard let textView else { return }
+            textView.window?.makeFirstResponder(textView)
+        }
         textView.onPasteImage = { [weak coordinator] in coordinator?.handlePasteImage() ?? false }
         return scroll
     }
@@ -441,6 +448,7 @@ private struct Bridge: UIViewRepresentable {
         let coordinator = context.coordinator
         controller.perform = { [weak coordinator] user in coordinator?.insertMention(user) }
         controller.performImage = { [weak coordinator] image in coordinator?.insertImage(image) }
+        controller.performFocus = { [weak textView] in textView?.becomeFirstResponder() }
         textView.onPasteImage = { [weak coordinator] in coordinator?.handlePasteImage() ?? false }
         return textView
     }

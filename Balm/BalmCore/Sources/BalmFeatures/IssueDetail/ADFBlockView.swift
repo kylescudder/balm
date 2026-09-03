@@ -25,15 +25,12 @@ struct ADFBlockView: View {
         switch block {
         case .paragraph(let text):
             Text(text)
-                .font(theme.typography.body)
-                .foregroundStyle(theme.palette.foreground)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
         case .heading(let level, let text):
             Text(text)
                 .font(headingFont(for: level))
-                .foregroundStyle(theme.palette.foreground)
                 .textSelection(.enabled)
                 .padding(.top, theme.spacing.s)
 
@@ -55,16 +52,15 @@ struct ADFBlockView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(theme.typography.bodyMono)
-                    .foregroundStyle(theme.palette.foreground)
+                    .textSelection(.enabled)
                     .padding(theme.spacing.m)
             }
-            .background(theme.palette.secondary)
-            .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
         case .quote(let children):
             HStack(spacing: theme.spacing.m) {
-                Rectangle()
-                    .fill(theme.palette.border)
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(.tertiary)
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: theme.spacing.xs) {
                     ForEach(Array(children.enumerated()), id: \.offset) { _, child in
@@ -102,10 +98,9 @@ struct ADFBlockView: View {
                 Text(filename ?? "Attachment")
                     .font(theme.typography.body)
             }
-            .foregroundStyle(theme.palette.mutedForeground)
+            .foregroundStyle(.secondary)
             .padding(theme.spacing.s)
-            .background(theme.palette.secondary)
-            .clipShape(RoundedRectangle(cornerRadius: theme.radii.sm, style: .continuous))
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
         case .table(let rows):
             VStack(alignment: .leading, spacing: 0) {
@@ -119,22 +114,22 @@ struct ADFBlockView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(theme.spacing.s)
-                            .overlay(Rectangle().stroke(theme.palette.border, lineWidth: 0.5))
+                            .overlay(Rectangle().stroke(.quaternary, lineWidth: 0.5))
                         }
                     }
-                    .background(rowIndex == 0 ? theme.palette.secondary : Color.clear)
+                    .background(rowIndex == 0 ? Color.secondary.opacity(0.08) : Color.clear)
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: theme.radii.sm).strokeBorder(theme.palette.border))
-            .clipShape(RoundedRectangle(cornerRadius: theme.radii.sm))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
 
         case .rule:
-            Divider().background(theme.palette.border)
+            Divider()
 
         case .unknown(let type):
-            Text("[Unsupported block: \(type)]")
-                .font(theme.typography.caption.monospaced())
-                .foregroundStyle(theme.palette.mutedForeground)
+            Text("Unsupported content: \(type)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -142,8 +137,7 @@ struct ADFBlockView: View {
     private func listRow(bullet: String, item: [ADFBlock]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: theme.spacing.s) {
             Text(bullet)
-                .font(theme.typography.body)
-                .foregroundStyle(theme.palette.mutedForeground)
+                .foregroundStyle(.secondary)
                 .frame(width: 18, alignment: .leading)
             VStack(alignment: .leading, spacing: theme.spacing.xs) {
                 ForEach(Array(item.enumerated()), id: \.offset) { _, block in
@@ -160,9 +154,8 @@ struct ADFBlockView: View {
             Text(alt)
         }
         .padding(theme.spacing.m)
-        .background(theme.palette.secondary)
-        .clipShape(RoundedRectangle(cornerRadius: theme.radii.sm))
-        .foregroundStyle(theme.palette.mutedForeground)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .foregroundStyle(.secondary)
     }
 
     private func headingFont(for level: Int) -> Font {

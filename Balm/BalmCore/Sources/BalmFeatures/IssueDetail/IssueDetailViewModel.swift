@@ -107,7 +107,7 @@ public final class IssueDetailViewModel {
             }
         } catch {
             issue = snapshot
-            toaster?.error("Couldn't change status: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't change status")
         }
     }
 
@@ -121,7 +121,7 @@ public final class IssueDetailViewModel {
             toaster?.success(user.map { "Assigned to \($0.displayName)" } ?? "Unassigned")
         } catch {
             issue = snapshot
-            toaster?.error("Couldn't reassign: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't reassign")
         }
     }
 
@@ -190,7 +190,7 @@ public final class IssueDetailViewModel {
             }
         } catch {
             issue = snapshot
-            toaster?.error("Couldn't change sprint: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't change sprint")
         }
     }
 
@@ -229,7 +229,7 @@ public final class IssueDetailViewModel {
             toaster?.success("Linked to \(target.key)")
         } catch {
             details.issueLinks.removeAll { $0.id == tempID }
-            toaster?.error("Couldn't link: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't link")
         }
     }
 
@@ -242,7 +242,7 @@ public final class IssueDetailViewModel {
             toaster?.success("Link removed")
         } catch {
             details.issueLinks.insert(snapshot, at: min(index, details.issueLinks.count))
-            toaster?.error("Couldn't remove link: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't remove link")
         }
     }
 
@@ -293,7 +293,7 @@ public final class IssueDetailViewModel {
             toaster?.success("Comment added")
         } catch {
             details.comments.removeAll { $0.id == tempID }
-            toaster?.error("Couldn't post comment: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't post comment")
         }
     }
 
@@ -379,7 +379,7 @@ public final class IssueDetailViewModel {
             toaster?.success(images.isEmpty ? "Comment added" : "Comment added with \(images.count) image(s)")
         } catch {
             details.comments.removeAll { $0.id == tempID }
-            toaster?.error("Couldn't post comment: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't post comment")
         }
     }
 
@@ -449,7 +449,7 @@ public final class IssueDetailViewModel {
             toaster?.success(hasImage ? "Comment added with image" : "Comment added")
         } catch {
             details.comments.removeAll { $0.id == tempID }
-            toaster?.error("Couldn't post comment: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't post comment")
         }
     }
 
@@ -488,7 +488,7 @@ public final class IssueDetailViewModel {
             toaster?.success("Comment updated")
         } catch {
             details.comments[index] = snapshot
-            toaster?.error("Couldn't edit comment: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't edit comment")
         }
     }
 
@@ -505,7 +505,7 @@ public final class IssueDetailViewModel {
             toaster?.success("Comment deleted")
         } catch {
             details.comments.insert(snapshot, at: min(index, details.comments.count))
-            toaster?.error("Couldn't delete comment: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't delete comment")
         }
     }
 
@@ -537,7 +537,7 @@ public final class IssueDetailViewModel {
             details.attachments.append(contentsOf: mapped)
             toaster?.success(raws.count == 1 ? "Uploaded \(filename)" : "Uploaded \(raws.count) files")
         } catch {
-            toaster?.error("Upload failed: \(error.localizedDescription)")
+            toaster?.report(error, "Upload failed")
         }
     }
 
@@ -566,7 +566,7 @@ public final class IssueDetailViewModel {
             toaster?.success("Deleted \(snapshot.filename)")
         } catch {
             details.attachments.insert(snapshot, at: min(index, details.attachments.count))
-            toaster?.error("Couldn't delete: \(error.localizedDescription)")
+            toaster?.report(error, "Couldn't delete")
         }
     }
 
@@ -650,7 +650,7 @@ public final class IssueDetailViewModel {
             toaster?.success(message)
         } catch {
             issue = snapshot
-            toaster?.error("Update failed: \(error.localizedDescription)")
+            toaster?.report(error, "Update failed")
         }
     }
 }

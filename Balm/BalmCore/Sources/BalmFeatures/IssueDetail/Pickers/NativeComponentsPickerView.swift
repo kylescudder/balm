@@ -2,15 +2,13 @@ import SwiftUI
 import BalmModels
 import BalmDesignSystem
 
+/// Multi-select: Return toggles the highlighted component and keeps the sheet
+/// open; ⌘↩ applies.
 struct NativeComponentsPickerView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.balmTheme) private var theme
-
     let components: [JiraComponent]
     let onApply: ([String]) -> Void
 
     @State private var draft: Set<String>
-    @State private var searchText = ""
 
     init(components: [JiraComponent], currentNames: [String], onApply: @escaping ([String]) -> Void) {
         self.components = components
@@ -24,34 +22,23 @@ struct NativeComponentsPickerView: View {
             confirmTitle: "Apply",
             onConfirm: { onApply(Array(draft).sorted()) }
         ) {
-            List {
-                if components.isEmpty {
-                    ContentUnavailableView("No components", systemImage: "shippingbox")
-                } else {
-                    ForEach(filteredComponents, id: \.name) { component in
-                        Button {
-                            toggle(component.name)
-                        } label: {
-                            HStack {
-                                Text(component.name)
-                                Spacer()
-                                if draft.contains(component.name) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(theme.palette.primary)
-                                }
-                            }
-                        }
-                    }
+            KeyboardFilterList(
+                items: components,
+                prompt: "Filter components",
+                emptyText: components.isEmpty ? "This project has no components." : "No components match.",
+                initialSelection: components.first { draft.contains($0.name) },
+                filterText: { $0.name },
+                onActivate: { toggle($0.name) }
+            ) { component in
+                HStack(spacing: 10) {
+                    Text(component.name)
+                    Spacer()
+                    Image(systemName: draft.contains(component.name) ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(draft.contains(component.name) ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary))
                 }
+                .contentShape(Rectangle())
             }
-            .searchable(text: $searchText, prompt: "Search components")
         }
-    }
-
-    private var filteredComponents: [JiraComponent] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return components }
-        return components.filter { $0.name.localizedStandardContains(query) }
     }
 
     private func toggle(_ name: String) {

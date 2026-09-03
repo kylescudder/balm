@@ -3,75 +3,92 @@ import BalmModels
 import BalmAPI
 import BalmDesignSystem
 
+/// Type to filter, arrows to move, Return to assign, Esc to cancel. The search
+/// field has focus the moment the sheet appears.
 struct AssigneePickerView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.balmTheme) private var theme
     @Environment(AppEnvironment.self) private var env
 
     let projectKey: String
-    let currentAccountID: String?
+    let currentDisplayName: String?
     let onSelect: (JiraUser?) -> Void
 
     @State private var users: [JiraUser] = []
     @State private var isLoading = false
-    @State private var searchText = ""
+
+    enum Choice: Hashable {
+        case unassigned
+        case user(JiraUser)
+    }
+
+    private var choices: [Choice] {
+        [.unassigned] + users.map(Choice.user)
+    }
+
+    private var current: Choice {
+        guard let name = currentDisplayName,
+              let user = users.first(where: { $0.displayName == name })
+        else { return .unassigned }
+        return .user(user)
+    }
 
     var body: some View {
         PickerScaffold(title: "Assignee") {
-            List {
-                Button {
-                    onSelect(nil)
+            KeyboardFilterList(
+                items: choices,
+                prompt: "Search people",
+                isLoading: isLoading,
+                emptyText: "No one matches.",
+                initialSelection: current,
+                filterText: { choice in
+                    switch choice {
+                    case .unassigned: return "Unassigned"
+                    case .user(let user): return "\(user.displayName) \(user.emailAddress ?? "")"
+                    }
+                },
+                onActivate: { choice in
+                    switch choice {
+                    case .unassigned: onSelect(nil)
+                    case .user(let user): onSelect(user)
+                    }
                     dismiss()
-                } label: {
-                    HStack {
-                        Label("Unassigned", systemImage: "person.slash")
-                        Spacer()
-                        if currentAccountID == nil { Image(systemName: "checkmark") }
-                    }
                 }
-
-                if isLoading {
-                    ProgressView()
-                } else if filteredUsers.isEmpty {
-                    ContentUnavailableView("No people", systemImage: "person.2")
-                } else {
-                    ForEach(filteredUsers, id: \.accountId) { user in
-                        Button {
-                            onSelect(user)
-                            dismiss()
-                        } label: {
-                            HStack(spacing: theme.spacing.s) {
-                                AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 28)
-                                VStack(alignment: .leading) {
-                                    Text(user.displayName)
-                                    if let email = user.emailAddress {
-                                        Text(email)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                if user.accountId == currentAccountID {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(theme.palette.primary)
-                                }
-                            }
-                        }
-                    }
-                }
+            ) { choice in
+                row(choice)
             }
-            .searchable(text: $searchText, prompt: "Search people")
             .task { await load() }
         }
     }
 
-    private var filteredUsers: [JiraUser] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return users }
-        return users.filter {
-            $0.displayName.localizedStandardContains(query)
-                || ($0.emailAddress?.localizedStandardContains(query) ?? false)
+    @ViewBuilder
+    private func row(_ choice: Choice) -> some View {
+        HStack(spacing: 10) {
+            switch choice {
+            case .unassigned:
+                Image(systemName: "person.crop.circle.dashed")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                Text("Unassigned")
+            case .user(let user):
+                AvatarView(name: user.displayName, avatarURL: user.avatarUrls?.bestAvailable, size: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(user.displayName)
+                    if let email = user.emailAddress {
+                        Text(email)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer()
+            if choice == current {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.tint)
+            }
         }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 
     private func load() async {
@@ -82,7 +99,7 @@ struct AssigneePickerView: View {
             users = try await env.api.send(UserEndpoints.ProjectUsers(projectKey: projectKey))
                 .sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
         } catch {
-            env.toaster.error("Couldn't load users: \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't load users")
         }
     }
 }

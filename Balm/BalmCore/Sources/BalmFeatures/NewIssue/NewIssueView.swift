@@ -168,7 +168,7 @@ public struct NewIssueView: View {
         case .assignee:
             AssigneePickerView(
                 projectKey: project.key,
-                currentAccountID: assignee?.accountId,
+                currentDisplayName: assignee?.displayName,
                 onSelect: { assignee = $0 }
             )
         case .priority:
@@ -217,7 +217,7 @@ public struct NewIssueView: View {
             ).filter { $0.subtask != true }
             if issueType == nil { issueType = availableIssueTypes.first }
         } catch {
-            env.toaster.error("Couldn't load issue types: \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't load issue types")
         }
     }
 
@@ -251,7 +251,7 @@ public struct NewIssueView: View {
             let valid = Set(componentOptions.map(\.id))
             selectedComponents = selectedComponents.filter { valid.contains($0.id) }
         } catch {
-            env.toaster.error("Couldn't load fields: \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't load fields")
         }
     }
 
@@ -325,7 +325,7 @@ public struct NewIssueView: View {
                 onCreated(response)
                 dismiss()
             } catch {
-                env.toaster.error("Create failed: \(error.localizedDescription)")
+                env.toaster.report(error, "Create failed")
             }
             isSubmitting = false
         }
@@ -358,10 +358,10 @@ struct IssueTypePickerView: View {
                         }
                         .frame(width: 18, height: 18)
                     }
-                    Text(type.name).foregroundStyle(theme.palette.foreground)
+                    Text(type.name)
                     Spacer()
                     if type.id == currentID {
-                        Image(systemName: "checkmark").foregroundStyle(theme.palette.primary)
+                        Image(systemName: "checkmark").foregroundStyle(.tint)
                     }
                 }
                 .contentShape(Rectangle())
