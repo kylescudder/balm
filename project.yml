@@ -21,7 +21,7 @@ settings:
     PRODUCT_NAME: Balm
     PRODUCT_BUNDLE_IDENTIFIER: app.balm
     CURRENT_PROJECT_VERSION: 1
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.10.0"
     CODE_SIGN_STYLE: Automatic
 
 packages:
