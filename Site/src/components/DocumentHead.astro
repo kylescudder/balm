@@ -14,5 +14,8 @@ const { title, description, ogTitle = title } = Astro.props;
   <title>{title}</title>
   <meta name="description" content={description} />
   <meta property="og:title" content={ogTitle} />
+  <meta property="og:description" content={description} />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#f7f5ef" />
   <link rel="icon" href="/assets/balm-droplet.svg" type="image/svg+xml" />
 </head>
