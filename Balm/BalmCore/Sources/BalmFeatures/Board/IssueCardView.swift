@@ -2,68 +2,50 @@ import SwiftUI
 import BalmModels
 import BalmDesignSystem
 
+/// A board card: key and priority, summary, labels and assignee. It lifts off
+/// the window background with a hairline shadow and carries no status of its
+/// own, because the column header already says where it is.
 struct IssueCardView: View {
-    @Environment(\.balmTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
     let issue: JiraIssue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: theme.spacing.s) {
-            HStack(spacing: theme.spacing.xs) {
-                if let icon = issue.issueType.iconUrl {
-                    AsyncImage(url: icon) { phase in
-                        if case .success(let img) = phase { img.resizable().scaledToFit() } else { Color.clear }
-                    }
-                    .frame(width: 14, height: 14)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
                 Text(issue.key)
-                    .font(theme.typography.caption.monospaced())
-                    .foregroundStyle(theme.palette.mutedForeground)
-                Spacer()
-                if let icon = issue.priority.iconUrl {
-                    AsyncImage(url: icon) { phase in
-                        if case .success(let img) = phase { img.resizable().scaledToFit() } else { Color.clear }
-                    }
-                    .frame(width: 14, height: 14)
-                }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Spacer(minLength: 0)
+                PriorityIcon(priority: issue.priority, size: 12)
             }
 
             Text(issue.summary)
-                .font(theme.typography.body)
-                .foregroundStyle(theme.palette.foreground)
+                .font(.body)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !issue.labels.isEmpty {
-                FlexibleStack(spacing: theme.spacing.xs) {
-                    ForEach(issue.labels.prefix(4), id: \.self) { BalmChip($0) }
-                }
-            }
-
-            HStack(spacing: theme.spacing.xs) {
-                if !issue.components.isEmpty {
-                    Text(issue.components.first?.name ?? "")
-                        .font(theme.typography.caption)
-                        .foregroundStyle(theme.palette.mutedForeground)
-                        .lineLimit(1)
-                    if issue.components.count > 1 {
-                        Text("+\(issue.components.count - 1)")
-                            .font(theme.typography.caption)
-                            .foregroundStyle(theme.palette.mutedForeground)
-                    }
-                }
-                Spacer()
+            HStack(spacing: 6) {
+                ForEach(issue.labels.prefix(3), id: \.self) { LabelTag(text: $0) }
+                Spacer(minLength: 0)
                 if let assignee = issue.assignee {
-                    AvatarView(name: assignee.displayName, avatarURL: assignee.avatarURL, size: 22)
+                    AvatarView(name: assignee.displayName, avatarURL: assignee.avatarURL, size: 20)
+                } else {
+                    UnassignedAvatar(size: 20)
                 }
             }
         }
-        .padding(theme.spacing.m)
-        .background(theme.palette.card)
-        .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+        .padding(12)
+        // A material rather than a fixed colour: it lifts off the window in
+        // both appearances, where a plain system background colour reads as
+        // white in light mode and disappears into the window in dark mode.
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous)
-                .strokeBorder(theme.palette.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.quaternary, lineWidth: 0.5)
         )
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.25 : 0.07), radius: colorScheme == .dark ? 3 : 1.5, y: 1)
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)

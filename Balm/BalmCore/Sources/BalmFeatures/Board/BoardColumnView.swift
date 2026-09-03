@@ -2,43 +2,55 @@ import SwiftUI
 import BalmModels
 import BalmDesignSystem
 
+/// A board column is a plain stack with a glyph header, not a box. The only
+/// time it draws a boundary is while a card is being dragged over it.
 struct BoardColumnView: View {
     @Environment(\.balmTheme) private var theme
     @Environment(\.openIssue) private var openIssue
     let column: BoardColumn
-    @Binding var selection: JiraIssue?
     /// Drag-and-drop: called with the dropped issue key + this column.
     var onMove: ((String, BoardColumn) -> Void)?
 
     @State private var isTargeted = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
             header
             ScrollView {
-                LazyVStack(spacing: theme.spacing.s) {
+                LazyVStack(spacing: 8) {
                     ForEach(column.issues, id: \.self) { issue in
-                        issueCard(issue)
-                            .draggable(issue.key)
+                        Button {
+                            openIssue(issue)
+                        } label: {
+                            IssueCardView(issue: issue)
+                        }
+                        .buttonStyle(.plain)
+                        .draggable(issue.key)
                     }
                     if column.issues.isEmpty {
-                        Text("No issues")
-                            .font(theme.typography.caption)
-                            .foregroundStyle(theme.palette.mutedForeground)
+                        Text("Nothing here")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity)
-                            .padding(theme.spacing.l)
+                            .padding(.vertical, 24)
                     }
                 }
-                .padding(.horizontal, theme.spacing.s)
-                .padding(.vertical, theme.spacing.s)
+                .padding(.horizontal, 2)
+                .padding(.bottom, 8)
                 .frame(maxWidth: .infinity, minHeight: 80, alignment: .top)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: theme.radii.lg))
+        .padding(6)
+        .background(
+            isTargeted ? AnyShapeStyle(theme.palette.accent.opacity(0.10)) : AnyShapeStyle(.clear),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: theme.radii.lg)
-                .strokeBorder(isTargeted ? theme.palette.primary : theme.palette.border,
-                              lineWidth: isTargeted ? 2 : 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    isTargeted ? theme.palette.accent : Color.clear,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                )
         )
         .dropDestination(for: String.self) { keys, _ in
             guard let key = keys.first, let onMove else { return false }
@@ -49,47 +61,20 @@ struct BoardColumnView: View {
         }
     }
 
-    @ViewBuilder
-    private func issueCard(_ issue: JiraIssue) -> some View {
-        #if os(macOS)
-        NavigationLink(value: issue) {
-            IssueCardView(issue: issue)
-        }
-        .buttonStyle(.plain)
-        .simultaneousGesture(TapGesture().onEnded { selection = issue })
-        #else
-        Button {
-            selection = issue
-            openIssue(issue)
-        } label: {
-            IssueCardView(issue: issue)
-        }
-        .buttonStyle(.plain)
-        #endif
-    }
-
     private var header: some View {
-        let token = StatusNormaliser.semanticTokenName(column.title)
-        let semantic = BalmPalette.Semantic.from(token)
-        let colour = theme.palette.color(for: semantic)
-        return HStack(spacing: theme.spacing.s) {
-            Circle()
-                .fill(colour)
-                .frame(width: 8, height: 8)
-            Text(column.title)
-                .font(theme.typography.headline)
-                .foregroundStyle(theme.palette.foreground)
+        HStack(spacing: 8) {
+            StatusGlyph(column.title, size: 14)
+            Text(StatusNormaliser.normalise(column.title))
+                .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-            Spacer()
-            Text("\(column.issues.count)")
-                .font(theme.typography.caption.weight(.semibold))
-                .foregroundStyle(colour)
-                .padding(.horizontal, theme.spacing.s)
-                .padding(.vertical, theme.spacing.xs)
-                .background(colour.opacity(0.14))
-                .clipShape(Capsule())
+            Text(column.issues.count, format: .number)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Spacer(minLength: 0)
         }
-        .padding(theme.spacing.m)
-        .background(theme.palette.card.opacity(0.6))
+        .padding(.horizontal, 6)
+        .frame(height: 28)
+        .accessibilityElement(children: .combine)
     }
 }

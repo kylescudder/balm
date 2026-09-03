@@ -17,19 +17,20 @@ public enum IssueViewMode: String, CaseIterable, Identifiable, Sendable {
     var systemImage: String { self == .list ? "list.bullet" : "rectangle.split.3x1" }
 }
 
+/// The content column: a scope bar over a list grouped by status health, or a
+/// board. Selection is owned by the shell, which shows the issue in the Mac
+/// inspector or the split view's detail column.
 public struct IssueListView: View {
     @Environment(AppEnvironment.self) private var env
-    @Environment(\.balmTheme) private var theme
-
-    /// iOS pushes detail via the shell's `openIssue`; macOS drives `selection`.
-    @Environment(\.openIssue) private var openIssueAction
 
     @Binding private var selection: JiraIssue?
     private let onOpenSettings: (() -> Void)?
+    /// Tells the shell why the selected issue was hidden from the view, so the
+    /// inspector can say so and offer the one action that would show it.
+    private let onVisibilityNote: ((IssueVisibilityNote?) -> Void)?
+    private let filterStore: FilterStore
+    private let savedFiltersStore: SavedFiltersStore
     @State private var model: IssueListViewModel
-    @State private var filterStore: FilterStore
-    @State private var savedFiltersStore: SavedFiltersStore
-    @State private var showingSprintPicker = false
     @State private var showingNewIssue = false
     @State private var showingFiltersSheet = false
     @State private var searchText = ""
@@ -39,15 +40,19 @@ public struct IssueListView: View {
 
     public init(
         project: JiraProject,
+        filterStore: FilterStore,
+        savedFiltersStore: SavedFiltersStore,
         selection: Binding<JiraIssue?>,
-        onOpenSettings: (() -> Void)? = nil
+        onOpenSettings: (() -> Void)? = nil,
+        onVisibilityNote: ((IssueVisibilityNote?) -> Void)? = nil
     ) {
         self._selection = selection
         self.onOpenSettings = onOpenSettings
+        self.onVisibilityNote = onVisibilityNote
+        self.filterStore = filterStore
+        self.savedFiltersStore = savedFiltersStore
         let placeholderAPI = BalmAPI_PlaceholderForState.shared
         self._model = State(initialValue: IssueListViewModel(project: project, api: placeholderAPI.api))
-        self._filterStore = State(initialValue: FilterStore(projectKey: project.key))
-        self._savedFiltersStore = State(initialValue: SavedFiltersStore(projectKey: project.key))
         self._viewModeRaw = AppStorage(
             wrappedValue: IssueViewMode.list.rawValue,
             "issues.viewMode.\(project.key)"
@@ -58,30 +63,56 @@ public struct IssueListView: View {
         IssueViewMode(rawValue: viewModeRaw) ?? .list
     }
 
-    public var body: some View {
-        #if os(macOS)
-        macBody
-        #else
-        iosBody
-        #endif
+    private var viewModeBinding: Binding<IssueViewMode> {
+        Binding(get: { viewMode }, set: { viewModeRaw = $0.rawValue })
     }
 
-    // MARK: - Mac: single-column main content. Filters are a sheet, detail is
-    //         surfaced as an `.inspector` only when a row is selected.
-
-    #if os(macOS)
-    private var macBody: some View {
-        NavigationStack {
+    public var body: some View {
+        VStack(spacing: 0) {
+            ScopeBar(
+                model: model,
+                filterStore: filterStore,
+                viewMode: viewModeBinding,
+                currentUserName: currentUserName,
+                statusText: model.searchState == .idle ? nil : "Searching everywhere for \u{201C}\(committedQuery)\u{201D}",
+                onOpenFilters: { showingFiltersSheet = true }
+            )
+            Divider()
             mainContent
-                .inspector(isPresented: detailInspectorBinding) {
-                    if let issue = selection {
-                        IssueDetailView(issue: issue, onClose: { selection = nil })
-                            .inspectorColumnWidth(min: 600, ideal: 780, max: 1040)
-                    }
-                }
+                // Always claim the column, so an empty board or list cannot
+                // shrink the stack and float the scope bar to the middle.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .environment(\.openIssue, OpenIssueAction { selection = $0 })
+        .navigationTitle(model.project.name)
+        #if !os(macOS)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleMenu { projectMenu }
+        #endif
         .toolbar { toolbarContent }
+        .searchable(text: $searchText, isPresented: $searchPresented, prompt: "Search issues")
+        .onSubmit(of: .search) {
+            Task { await submitSearch() }
+        }
+        .onChange(of: searchText) { _, next in
+            model.invalidateSearchIfQueryChanged(next)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .balmSearchRequested)) { _ in
+            searchPresented = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .balmToggleFiltersRequested)) { _ in
+            showingFiltersSheet.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .balmRefreshIssuesRequested)) { _ in
+            model.reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .balmCreateIssueRequested)) { _ in
+            showingNewIssue = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .balmIssueUpdated)) { note in
+            if let issue = note.userInfo?["issue"] as? JiraIssue {
+                model.applyExternalUpdate(issue)
+            }
+        }
         .sheet(isPresented: $showingFiltersSheet) {
             FilterSheetView(
                 store: filterStore,
@@ -90,20 +121,95 @@ public struct IssueListView: View {
                 sprints: model.selectedSprintNames,
                 onDismiss: { showingFiltersSheet = false }
             )
+            #if !os(macOS)
+            .presentationDetents([.large])
+            #endif
         }
-        .applySharedModifiers(
-            showingSprintPicker: $showingSprintPicker,
-            showingNewIssue: $showingNewIssue,
-            model: model,
-            filterStore: filterStore,
-            taskID: model.project.id,
-            reconnect: reconnectAndLoad,
-            onIssueCreated: handleCreated
-        )
+        .sheet(isPresented: $showingNewIssue) {
+            NewIssueView(
+                project: model.project,
+                defaultSprint: model.availableSprints.first { model.selectedSprintIDs.contains($0.name) },
+                onCreated: { handleCreated(key: $0.key) }
+            )
+        }
+        .task(id: model.project.id) {
+            await reconnectAndLoad()
+        }
+        .onChange(of: filterStore.definition) { _, next in
+            model.setUserDefinition(next)
+            publishVisibilityNote()
+        }
+        .onChange(of: selection) { _, _ in publishVisibilityNote() }
+        .onChange(of: model.searchState) { _, _ in publishVisibilityNote() }
+        .onChange(of: model.selectedSprintIDs) { _, _ in publishVisibilityNote() }
+        #if os(macOS)
         .background { viewShortcutSink }
-        .id(model.project.id)
+        #endif
     }
 
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        #if os(macOS)
+        // `.automatic`, not `.primaryAction`: on macOS 26 the toolbar is split
+        // into per-column zones and primary actions are forced to the trailing
+        // zone, which is the inspector's when it is open. Automatic keeps these
+        // over the list where they belong.
+        ToolbarItemGroup(placement: .automatic) {
+            Picker("View", selection: viewModeBinding) {
+                ForEach(IssueViewMode.allCases) { mode in
+                    Label(mode.label, systemImage: mode.systemImage).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .help("List (1), Board (2)")
+            Button {
+                showingNewIssue = true
+            } label: {
+                Label("New issue", systemImage: "plus")
+            }
+            .help("New issue (N)")
+        }
+        #else
+        if let onOpenSettings {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: onOpenSettings) {
+                    AvatarView(name: currentUserName, avatarURL: currentUserAvatar, size: 28)
+                }
+                .accessibilityLabel("Settings")
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showingNewIssue = true
+            } label: {
+                Image(systemName: "plus")
+            }
+            .accessibilityLabel("New issue")
+        }
+        #endif
+    }
+
+    #if !os(macOS)
+    @ViewBuilder
+    private var projectMenu: some View {
+        ForEach(env.projectListStore.projects) { project in
+            Button {
+                env.activeProjectStore.set(project)
+            } label: {
+                if project.id == model.project.id {
+                    Label(project.name, systemImage: "checkmark")
+                } else {
+                    Text(project.name)
+                }
+            }
+        }
+    }
+    #endif
+
+    #if os(macOS)
     /// Invisible buttons that own the 1/2 view-switch shortcuts. The segmented
     /// Picker can't carry per-option shortcuts, and single keys don't fire
     /// while a text field (the search bar) has focus.
@@ -118,216 +224,119 @@ public struct IssueListView: View {
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
     }
-
-    /// Open the inspector iff an issue is selected. Collapsing the inspector
-    /// deselects, so it stays in sync with the list selection.
-    private var detailInspectorBinding: Binding<Bool> {
-        Binding(
-            get: { selection != nil },
-            set: { isShown in
-                if !isShown { selection = nil }
-            }
-        )
-    }
     #endif
 
-    // MARK: - iOS / iPadOS: filters as bottom sheet
-
-    private var iosBody: some View {
-        mainContent
-            .toolbar { toolbarContent }
-            .sheet(isPresented: $showingFiltersSheet) {
-                FilterSheetView(
-                    store: filterStore,
-                    savedStore: savedFiltersStore,
-                    options: model.filterOptions,
-                    sprints: model.selectedSprintNames,
-                    onDismiss: { showingFiltersSheet = false }
-                )
-                .presentationDetents([.large])
-            }
-            .applySharedModifiers(
-                showingSprintPicker: $showingSprintPicker,
-                showingNewIssue: $showingNewIssue,
-                model: model,
-                filterStore: filterStore,
-                taskID: model.project.id,
-                reconnect: reconnectAndLoad,
-                onIssueCreated: handleCreated
-            )
-            .id(model.project.id)
-    }
-
-    // MARK: - Shared content
+    // MARK: - Content
 
     @ViewBuilder
     private var mainContent: some View {
-        Group {
-            if model.searchState != .idle {
-                // A global search has been committed — the content area becomes a
-                // native search-results presentation, taking over from the
-                // board/list (and any load/empty state) until the field clears.
-                searchResults
-            } else {
-                switch model.loadState {
-                case .idle:
-                    centred(ProgressView("Loading issues…"))
-                case .loading where model.issues.isEmpty:
-                    centred(ProgressView("Loading issues…"))
-                case .failed(let message):
-                    centred(Text(message).foregroundStyle(theme.palette.destructive))
-                case .loaded where model.issues.isEmpty:
-                    centred(emptyState)
-                default:
+        if model.searchState != .idle {
+            searchResults
+        } else {
+            switch model.loadState {
+            case .idle:
+                centred(ProgressView("Loading issues"))
+            case .loading where model.issues.isEmpty:
+                centred(ProgressView("Loading issues"))
+            case .failed(let message):
+                ContentUnavailableView {
+                    Label("Couldn't load issues", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Try again") { model.reload() }
+                }
+            case .loaded where model.issues.isEmpty:
+                emptyState
+            default:
+                if isFilteringLocally && filteredIssues.isEmpty {
+                    noLocalMatches
+                } else {
                     content
                 }
             }
         }
-        .navigationTitle(model.project.name)
-        .searchable(text: $searchText, isPresented: $searchPresented, prompt: "Filter in view · ↵ searches everywhere")
-        .onSubmit(of: .search) {
-            // ⌘K → type a key → Enter jumps straight to that ticket (even if
-            // it isn't in the current view). Any other term runs an
-            // instance-wide search whose hits show under "More results".
-            Task { await submitSearch() }
-        }
-        .onChange(of: searchText) { _, next in
-            // Any material change to the query (including emptying it) drops the
-            // committed instance-wide results, so a new term never shows stale
-            // hits from the previous one until ↵ is pressed again.
-            model.invalidateSearchIfQueryChanged(next)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .balmSearchRequested)) { _ in
-            // Cmd+K focuses the inline filter rather than opening a modal.
-            searchPresented = true
+    }
+
+    private var isFilteringLocally: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Typed text matched nothing in the loaded view. Return runs the search
+    /// across every project, so say so rather than showing an empty board.
+    private var noLocalMatches: some View {
+        ContentUnavailableView {
+            Label("No matches in this view", systemImage: "magnifyingglass")
+        } description: {
+            Text("Press Return to search every project for \u{201C}\(searchText.trimmingCharacters(in: .whitespaces))\u{201D}.")
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    @ViewBuilder
+    private var content: some View {
+        switch viewMode {
+        case .list:
+            listBody
+        case .board:
+            BoardView(
+                columns: filteredColumns,
+                columnSelection: $boardColumnID,
+                onColumnViewed: { model.refreshInBackground() }
+            ) { key, column in
+                Task { await model.moveIssue(key: key, to: column) }
+            }
+            .onAppear { syncBoardColumnSelection() }
+            .onChange(of: filteredColumns.map(\.id)) { _, _ in syncBoardColumnSelection() }
+            .onChange(of: selection) { _, _ in syncBoardColumnSelection() }
+        }
+    }
+
+    private var listBody: some View {
+        List(selection: $selection) {
+            ForEach(IssueListViewModel.healthSections(from: filteredIssues)) { section in
+                Section {
+                    ForEach(section.issues, id: \.self) { issue in
+                        IssueRowView(issue: issue)
+                            .tag(issue)
+                    }
+                } header: {
+                    sectionHeader(section)
+                }
+            }
+        }
+        .listStyle(platformListStyle)
+        .animation(.spring(duration: 0.25), value: filteredIssues.map(\.id))
+        .refreshable { await model.reloadAwaiting() }
+    }
+
+    private func sectionHeader(_ section: IssueHealthSection) -> some View {
+        HStack(spacing: 6) {
+            StatusGlyph(spec: section.health.representativeGlyph, size: 12)
+            Text(section.health.title)
+            Text(section.issues.count, format: .number)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .textCase(nil)
+    }
+
+    private var platformListStyle: some ListStyle {
         #if os(macOS)
-        macToolbar
+        return .inset
         #else
-        iosToolbar
+        return .insetGrouped
         #endif
     }
 
-    private var viewModeBinding: Binding<IssueViewMode> {
-        Binding(get: { viewMode }, set: { viewModeRaw = $0.rawValue })
+    private func syncBoardColumnSelection() {
+        boardColumnID = BoardColumnSelectionPolicy.preferredColumnID(
+            current: boardColumnID,
+            selectedIssue: selection,
+            columns: filteredColumns
+        )
     }
 
-    #if !os(macOS)
-    /// Compact iOS bar: search + new are primary; everything else folds into
-    /// an overflow menu so the navigation bar isn't a wall of glyphs.
-    @ToolbarContentBuilder
-    private var iosToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                showingNewIssue = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            Menu {
-                Picker("View", selection: viewModeBinding) {
-                    ForEach(IssueViewMode.allCases) { mode in
-                        Label(mode.label, systemImage: mode.systemImage).tag(mode)
-                    }
-                }
-                .pickerStyle(.inline)
-                Section {
-                    Button {
-                        showingSprintPicker = true
-                    } label: {
-                        Label("Sprints (\(model.selectedSprintIDs.count))", systemImage: "calendar")
-                    }
-                    Button(action: toggleFilters) {
-                        let count = filterStore.definition.activeCount
-                        Label(count > 0 ? "Filters (\(count))" : "Filters",
-                              systemImage: "line.3.horizontal.decrease.circle")
-                    }
-                    Button { model.reload() } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(model.loadState == .loading)
-                    if let onOpenSettings {
-                        Button(action: onOpenSettings) {
-                            Label("Settings", systemImage: "gearshape")
-                        }
-                    }
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-        }
-    }
-    #endif
-
-    @ToolbarContentBuilder
-    private var macToolbar: some ToolbarContent {
-        ToolbarItem {
-            Picker("View", selection: viewModeBinding) {
-                ForEach(IssueViewMode.allCases) { mode in
-                    Label(mode.label, systemImage: mode.systemImage).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 110)
-        }
-        ToolbarItem {
-            Button {
-                showingSprintPicker = true
-            } label: {
-                Label("Sprints", systemImage: "calendar")
-                    .labelStyle(.iconOnly)
-            }
-            .keyboardShortcut("s", modifiers: [])
-            .help("Sprints (\(model.selectedSprintIDs.count)) — S")
-        }
-        ToolbarItem {
-            Button(action: toggleFilters) {
-                let count = filterStore.definition.activeCount
-                Label(
-                    "Filters",
-                    systemImage: count > 0
-                        ? "line.3.horizontal.decrease.circle.fill"
-                        : "line.3.horizontal.decrease.circle"
-                )
-                .labelStyle(.iconOnly)
-            }
-            .keyboardShortcut("f", modifiers: [])
-            .help(filterStore.definition.activeCount > 0
-                  ? "Filters (\(filterStore.definition.activeCount) active)"
-                  : "Filters")
-        }
-        ToolbarItem {
-            Button {
-                showingNewIssue = true
-            } label: {
-                Label("New Issue", systemImage: "plus")
-                    .labelStyle(.iconOnly)
-            }
-            .keyboardShortcut("a", modifiers: [])
-            .help("New Issue — A")
-        }
-        ToolbarItem {
-            Button { model.reload() } label: {
-                if model.loadState == .loading {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
-                }
-            }
-            .keyboardShortcut("r", modifiers: [.command])
-            .disabled(model.loadState == .loading)
-            .help("Refresh (⌘R)")
-        }
-    }
-
-    private func toggleFilters() {
-        showingFiltersSheet.toggle()
-    }
+    // MARK: - Search
 
     /// Handle ↵ in the search bar. A term that resolves to an issue key (a full
     /// `PROJ-123`, or a bare number assumed to be the current project) jumps
@@ -348,8 +357,7 @@ public struct IssueListView: View {
     }
 
     /// Issues in the loaded view matching the live search text — key, title, or
-    /// body. Empty query = everything currently loaded. This is the instant,
-    /// no-network filter; ↵ then reaches beyond the view via `model.search`.
+    /// body. Empty query = everything currently loaded.
     private var filteredIssues: [JiraIssue] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return model.issues }
@@ -360,82 +368,17 @@ public struct IssueListView: View {
         }
     }
 
-    /// Global search hits that aren't already in the in-view list, deduped by
-    /// key — the "More results" set.
+    /// Global search hits that aren't already in the in-view list.
     private var globalExtras: [JiraIssue] {
         guard !model.globalResults.isEmpty else { return [] }
         let localKeys = Set(filteredIssues.map(\.key))
         return model.globalResults.filter { !localKeys.contains($0.key) }
     }
 
-    /// Board columns for the in-view (locally filtered) issues. Global search
-    /// hits never appear here — while a search is committed the whole content
-    /// area switches to `searchResults` instead.
     private var filteredColumns: [BoardColumn] {
         IssueListViewModel.columns(from: filteredIssues)
     }
 
-    @ViewBuilder
-    private var content: some View {
-        switch viewMode {
-        case .list:
-            listBody
-        case .board:
-            BoardView(
-                columns: filteredColumns,
-                selection: $selection,
-                columnSelection: $boardColumnID,
-                onColumnViewed: { model.refreshInBackground() }
-            ) { key, column in
-                Task { await model.moveIssue(key: key, to: column) }
-            }
-            .onAppear { syncBoardColumnSelection() }
-            .onChange(of: filteredColumns.map(\.id)) { _, _ in syncBoardColumnSelection() }
-            .onChange(of: selection) { _, _ in syncBoardColumnSelection() }
-        }
-    }
-
-    private func syncBoardColumnSelection() {
-        boardColumnID = BoardColumnSelectionPolicy.preferredColumnID(
-            current: boardColumnID,
-            selectedIssue: selection,
-            columns: filteredColumns
-        )
-    }
-
-    private var listBody: some View {
-        List(selection: $selection) {
-            ForEach(filteredIssues, id: \.self) { issue in
-                #if os(macOS)
-                NavigationLink(value: issue) {
-                    IssueRowView(issue: issue)
-                }
-                .simultaneousGesture(TapGesture().onEnded {
-                    selection = issue
-                    model.refreshInBackground()
-                })
-                .tag(issue)
-                #else
-                Button {
-                    selection = issue
-                    openIssueAction(issue)
-                } label: {
-                    IssueRowView(issue: issue)
-                }
-                .buttonStyle(.plain)
-                #endif
-            }
-        }
-        .animation(.spring(duration: 0.25), value: filteredIssues.map(\.id))
-        .refreshable { await model.reloadAwaiting() }
-    }
-
-    // MARK: - Global search results (shared by list & board while searching)
-
-    /// The committed-search presentation: in-view matches and instance-wide hits
-    /// as a native sectioned `List`, with `ContentUnavailableView` for the empty
-    /// and failed states. Replaces the board/list — search is its own mode, not
-    /// a column, so board and list surface out-of-view matches identically.
     @ViewBuilder
     private var searchResults: some View {
         let hasLocal = !filteredIssues.isEmpty
@@ -443,10 +386,10 @@ public struct IssueListView: View {
         case .idle:
             EmptyView()
         case .searching where !hasLocal:
-            centred(ProgressView("Searching all projects…"))
+            centred(ProgressView("Searching all projects"))
         case .failed(let message) where !hasLocal:
             ContentUnavailableView {
-                Label("Couldn’t search", systemImage: "exclamationmark.triangle")
+                Label("Couldn't search", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             }
@@ -460,49 +403,245 @@ public struct IssueListView: View {
     private func searchResultsList(hasLocal: Bool) -> some View {
         List(selection: $selection) {
             if hasLocal {
-                Section("In current view") {
+                Section {
                     ForEach(filteredIssues, id: \.self) { issue in
-                        NavigationLink(value: issue) {
-                            IssueRowView(issue: issue)
-                        }
-                        .tag(issue)
+                        IssueRowView(issue: issue)
+                            .tag(issue)
                     }
+                } header: {
+                    resultsHeader(systemImage: "list.bullet", title: "In this view", count: filteredIssues.count)
                 }
             }
-            moreResultsSection
-        }
-    }
-
-    /// The instance-wide section: hits not already shown in view, plus the
-    /// search's in-flight / error / empty states rendered inline.
-    @ViewBuilder
-    private var moreResultsSection: some View {
-        Section("More results") {
             switch model.searchState {
             case .idle:
                 EmptyView()
             case .searching:
-                HStack(spacing: theme.spacing.s) {
-                    ProgressView().controlSize(.small)
-                    Text("Searching all projects…")
-                        .foregroundStyle(theme.palette.mutedForeground)
+                Section {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Searching all projects")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             case .failed(let message):
-                Text(message).foregroundStyle(theme.palette.destructive)
+                Section {
+                    Text(message).foregroundStyle(.red)
+                }
             case .loaded:
-                if globalExtras.isEmpty {
-                    Text("No other matches across your projects.")
-                        .foregroundStyle(theme.palette.mutedForeground)
+                if hiddenGroups.isEmpty {
+                    Section {
+                        Text("No other matches across your projects.")
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
-                    ForEach(globalExtras, id: \.self) { issue in
-                        NavigationLink(value: issue) {
-                            IssueRowView(issue: issue)
+                    ForEach(hiddenGroups) { group in
+                        Section {
+                            ForEach(group.results) { result in
+                                HiddenResultRow(
+                                    issue: result.issue,
+                                    systemImage: group.kind.systemImage,
+                                    detail: reasonText(for: result)
+                                )
+                                .tag(result.issue)
+                            }
+                        } header: {
+                            resultsHeader(
+                                systemImage: group.kind.systemImage,
+                                title: group.kind.title,
+                                count: group.results.count,
+                                action: group.kind == .filtered ? ("Clear filters", { filterStore.clear() }) : nil
+                            )
                         }
-                        .tag(issue)
                     }
                 }
             }
         }
+        .listStyle(platformListStyle)
+    }
+
+    private func resultsHeader(
+        systemImage: String,
+        title: String,
+        count: Int,
+        action: (String, () -> Void)? = nil
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.tertiary)
+            Text(title)
+            Text(count, format: .number)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Spacer(minLength: 8)
+            if let action {
+                Button(action.0, action: action.1)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+            }
+        }
+        .textCase(nil)
+    }
+
+    // MARK: - Hidden result reasons
+
+    private var committedQuery: String {
+        searchText.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var searchScope: SearchScope {
+        SearchScope(
+            activeProjectKey: model.project.key,
+            selectedSprintNames: model.selectedSprintNames,
+            loadedKeys: Set(model.issues.map(\.key)),
+            definition: filterStore.definition
+        )
+    }
+
+    private var hiddenGroups: [HiddenGroup] {
+        SearchTriage.groups(for: globalExtras, scope: searchScope)
+    }
+
+    /// One line under a hidden result saying exactly why it was not in view.
+    private func reasonText(for result: HiddenResult) -> String {
+        switch result.reason {
+        case .otherProject(let key):
+            return "In \(projectName(forKey: key))"
+        case .outsideSprints(let name):
+            guard let name else { return "In the backlog" }
+            if let sprint = result.issue.sprint, sprint.state.lowercased() == "closed" {
+                if let completed = sprint.completeDate {
+                    let formatter = RelativeDateTimeFormatter()
+                    return "In \(name), closed \(formatter.localizedString(for: completed, relativeTo: Date()))"
+                }
+                return "In \(name), a closed sprint"
+            }
+            return "In \(name), not one of your selected sprints"
+        case .filtered(let mismatch):
+            switch mismatch {
+            case .conditions(let conditions):
+                if conditions.count == 1,
+                   let condition = conditions.first,
+                   condition.field == .assignee,
+                   condition.op == .isAnyOf,
+                   let me = currentUserName,
+                   condition.values == [me] {
+                    if let assignee = result.issue.assignee {
+                        return "Assigned to \(assignee.displayName), not you"
+                    }
+                    return "Unassigned, not you"
+                }
+                let summaries = conditions.map {
+                    FilterChip.summary($0, options: model.filterOptions, currentUserName: currentUserName)
+                }
+                return "Excluded by \(summaries.joined(separator: ", "))"
+            case .jql:
+                return "Excluded by your JQL filter"
+            case .whole:
+                return "Excluded by your filters"
+            }
+        case .matchedElsewhere(let loaded):
+            return loaded
+                ? "In your view. The match is in comments or a field the live filter does not search."
+                : "In your view but not loaded yet. Refresh to see it."
+        }
+    }
+
+    private func projectName(forKey key: String) -> String {
+        env.projectListStore.projects.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }?.name ?? key
+    }
+
+    /// Builds the inspector note for the current selection, or clears it when
+    /// the selection is in view or no search is committed.
+    private func publishVisibilityNote() {
+        guard let onVisibilityNote else { return }
+        guard model.searchState != .idle,
+              let issue = selection,
+              !filteredIssues.contains(where: { $0.key == issue.key }),
+              globalExtras.contains(where: { $0.key == issue.key })
+        else {
+            onVisibilityNote(nil)
+            return
+        }
+        let result = HiddenResult(issue: issue, reason: SearchTriage.reason(for: issue, scope: searchScope))
+        onVisibilityNote(visibilityNote(for: result))
+    }
+
+    private func visibilityNote(for result: HiddenResult) -> IssueVisibilityNote {
+        let detail = reasonText(for: result)
+        var actionTitle: String?
+        var action: (() -> Void)?
+        switch result.reason {
+        case .otherProject(let key):
+            if let project = env.projectListStore.projects.first(where: { $0.key.caseInsensitiveCompare(key) == .orderedSame }) {
+                actionTitle = "Switch to \(project.name)"
+                action = { env.activeProjectStore.set(project) }
+            }
+        case .outsideSprints(let name):
+            let target = name ?? JiraSprint.backlog.name
+            if model.availableSprints.contains(where: { $0.name == target }) {
+                actionTitle = name == nil ? "Add backlog" : "Add \(target)"
+                action = { model.setSprintSelection(model.selectedSprintIDs.union([target])) }
+            }
+        case .filtered:
+            actionTitle = "Clear filters"
+            action = { filterStore.clear() }
+        case .matchedElsewhere(let loaded):
+            if !loaded {
+                actionTitle = "Refresh"
+                action = { model.reload() }
+            }
+        }
+        return IssueVisibilityNote(
+            systemImage: result.reason.group.systemImage,
+            text: "Not in your view. \(detail)",
+            actionTitle: actionTitle,
+            action: action
+        )
+    }
+
+    // MARK: - Empty states
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if model.selectedSprintIDs.isEmpty {
+            ContentUnavailableView {
+                Label("No sprint selected", systemImage: "calendar")
+            } description: {
+                #if os(macOS)
+                Text("Choose a sprint in the bar above, or press ⇧S.")
+                #else
+                Text("Choose a sprint in the bar above.")
+                #endif
+            }
+        } else if !model.userDefinition.isEmpty {
+            ContentUnavailableView {
+                Label("No matches", systemImage: "line.3.horizontal.decrease")
+            } description: {
+                Text("Nothing in the selected sprint matches these filters.")
+            } actions: {
+                Button("Clear filters") { filterStore.clear() }
+            }
+        } else {
+            ContentUnavailableView {
+                Label("Nothing here", systemImage: "tray")
+            } description: {
+                Text(model.selectedSprintIDs.count == 1
+                     ? "No issues in this sprint."
+                     : "No issues in the selected sprints.")
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var currentUserName: String? {
+        if case .signedIn(_, _, let user) = env.authState { return user?.displayName }
+        return nil
+    }
+
+    private var currentUserAvatar: URL? {
+        if case .signedIn(_, _, let user) = env.authState { return user?.avatarUrls?.bestAvailable }
+        return nil
     }
 
     /// Post-create: refresh the list so the new ticket is immediately visible,
@@ -510,7 +649,7 @@ public struct IssueListView: View {
     private func handleCreated(key: String) {
         Task { await model.refreshAfterCreate(key: key) }
         env.toaster.success("Created \(key)", actions: [
-            .init(title: "Copy \(key)") {
+            .init(title: "Copy") {
                 setClipboard(key)
                 env.toaster.info("Copied \(key)")
             },
@@ -518,18 +657,10 @@ public struct IssueListView: View {
                 Task {
                     var issue = model.issues.first { $0.key == key }
                     if issue == nil { issue = await model.fetchIssue(key: key) }
-                    if let issue { openCreatedIssue(issue) }
+                    if let issue { selection = issue }
                 }
             }
         ])
-    }
-
-    private func openCreatedIssue(_ issue: JiraIssue) {
-        #if os(macOS)
-        selection = issue
-        #else
-        openIssueAction(issue)
-        #endif
     }
 
     private func setClipboard(_ string: String) {
@@ -554,82 +685,6 @@ public struct IssueListView: View {
         VStack { content }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(spacing: theme.spacing.m) {
-            Image(systemName: "tray")
-                .font(.largeTitle)
-                .foregroundStyle(theme.palette.mutedForeground)
-            if model.selectedSprintIDs.isEmpty {
-                Text("No sprints selected.")
-                    .font(theme.typography.headline)
-                    .foregroundStyle(theme.palette.foreground)
-                Text("Pick at least one sprint or the backlog to see issues.")
-                    .foregroundStyle(theme.palette.mutedForeground)
-                    .multilineTextAlignment(.center)
-                Button("Pick Sprints") { showingSprintPicker = true }
-                    .buttonStyle(.borderedProminent)
-            } else if !model.userDefinition.isEmpty {
-                Text("No matches.")
-                    .font(theme.typography.headline)
-                    .foregroundStyle(theme.palette.foreground)
-                Text("Adjust the filters or pick more sprints.")
-                    .foregroundStyle(theme.palette.mutedForeground)
-                    .multilineTextAlignment(.center)
-            } else {
-                Text("No issues in the selected sprint\(model.selectedSprintIDs.count == 1 ? "" : "s").")
-                    .font(theme.typography.headline)
-                    .foregroundStyle(theme.palette.foreground)
-                Button("Pick Sprints") { showingSprintPicker = true }
-                    .buttonStyle(.borderless)
-            }
-        }
-        .padding(theme.spacing.xl)
-    }
-}
-
-private extension View {
-    /// Sheets, notification listeners, filter syncing, and task hooks that
-    /// apply to both Mac and iOS layouts. Pulled out so the `body` reads
-    /// cleanly on either platform.
-    @MainActor
-    func applySharedModifiers(
-        showingSprintPicker: Binding<Bool>,
-        showingNewIssue: Binding<Bool>,
-        model: IssueListViewModel,
-        filterStore: FilterStore,
-        taskID: String,
-        reconnect: @escaping () async -> Void,
-        onIssueCreated: @escaping (String) -> Void
-    ) -> some View {
-        self
-            .sheet(isPresented: showingSprintPicker) {
-                SprintMultiSelectView(model: model)
-                    .presentationDetents([.medium, .large])
-            }
-            .sheet(isPresented: showingNewIssue) {
-                NewIssueView(
-                    project: model.project,
-                    defaultSprint: model.availableSprints.first { model.selectedSprintIDs.contains($0.name) },
-                    onCreated: { onIssueCreated($0.key) }
-                )
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .balmCreateIssueRequested)) { _ in
-                showingNewIssue.wrappedValue = true
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .balmIssueUpdated)) { note in
-                if let issue = note.userInfo?["issue"] as? JiraIssue {
-                    model.applyExternalUpdate(issue)
-                }
-            }
-            .task(id: taskID) {
-                await reconnect()
-            }
-            .onChange(of: filterStore.definition) { _, next in
-                model.setUserDefinition(next)
-            }
-    }
 }
 
 /// `@State` initialisers cannot read `@Environment`, so the VM bootstraps with
@@ -646,4 +701,30 @@ struct NullTokens: TokenProvider {
         throw AuthError.refreshFailed(reason: "not signed in")
     }
     func invalidateAccessToken() async {}
+}
+
+/// A search hit that was not in the view: the normal row, plus one quiet line
+/// underneath saying why.
+struct HiddenResultRow: View {
+    let issue: JiraIssue
+    let systemImage: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            IssueRowView(issue: issue)
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.leading, 24)
+            .padding(.bottom, 2)
+        }
+        .accessibilityElement(children: .combine)
+    }
 }
