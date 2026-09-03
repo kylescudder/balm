@@ -1,23 +1,37 @@
 import SwiftUI
-import BalmDesignSystem
 
-struct SectionHeading: View {
-    @Environment(\.balmTheme) private var theme
+/// A section title inside the issue detail: headline weight with an optional
+/// count in secondary and an optional trailing action.
+struct SectionHeading<Trailing: View>: View {
     let title: String
-    let trailing: AnyView?
+    let count: Int?
+    let trailing: Trailing
 
-    init(_ title: String, trailing: (some View)? = Optional<EmptyView>.none) {
+    init(_ title: String, count: Int? = nil, @ViewBuilder trailing: () -> Trailing) {
         self.title = title
-        self.trailing = trailing.map { AnyView($0) }
+        self.count = count
+        self.trailing = trailing()
     }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
-                .font(theme.typography.headline)
-                .foregroundStyle(theme.palette.foreground)
-            Spacer()
+                .font(.headline)
+            if let count {
+                Text(count, format: .number)
+                    .font(.headline.weight(.regular))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 0)
             trailing
+                .controlSize(.small)
         }
+    }
+}
+
+extension SectionHeading where Trailing == EmptyView {
+    init(_ title: String, count: Int? = nil) {
+        self.init(title, count: count) { EmptyView() }
     }
 }

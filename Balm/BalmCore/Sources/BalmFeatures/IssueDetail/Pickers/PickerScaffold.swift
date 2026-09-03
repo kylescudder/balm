@@ -44,6 +44,8 @@ struct PickerScaffold<Content: View>: View {
                                 onConfirm()
                                 dismiss()
                             }
+                            .keyboardShortcut(.return, modifiers: .command)
+                            .help("\(confirmTitle) (⌘↩)")
                             .disabled(!canConfirm)
                         }
                     }

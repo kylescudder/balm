@@ -1,13 +1,14 @@
 import SwiftUI
 
+/// The field has focus on arrival: type a label, Return adds it, keep typing.
+/// ⌘↩ applies the list.
 struct LabelsEditorView: View {
-    @Environment(\.dismiss) private var dismiss
-
     let current: [String]
     let onApply: ([String]) -> Void
 
     @State private var draft: [String]
     @State private var newLabel: String = ""
+    @FocusState private var fieldFocused: Bool
 
     init(current: [String], onApply: @escaping ([String]) -> Void) {
         self.current = current
@@ -22,25 +23,40 @@ struct LabelsEditorView: View {
             onConfirm: { onApply(draft) }
         ) {
             Form {
-                Section("Add Label") {
+                Section {
                     HStack {
-                        TextField("Label", text: $newLabel)
+                        TextField("Add a label", text: $newLabel)
                             #if os(iOS)
                             .textInputAutocapitalization(.never)
                             #endif
                             .autocorrectionDisabled()
+                            .focused($fieldFocused)
                             .onSubmit(addLabel)
                         Button("Add") { addLabel() }
                             .disabled(trimmed.isEmpty)
                     }
+                } footer: {
+                    Text("Return adds the label. ⌘↩ applies.")
                 }
 
-                Section("Current Labels") {
+                Section("Labels") {
                     if draft.isEmpty {
-                        ContentUnavailableView("No labels", systemImage: "tag")
+                        Text("No labels yet.")
+                            .foregroundStyle(.secondary)
                     } else {
                         ForEach(draft, id: \.self) { label in
-                            Text(label)
+                            HStack {
+                                Text(label)
+                                Spacer()
+                                Button {
+                                    draft.removeAll { $0 == label }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Remove \(label)")
+                            }
                         }
                         .onDelete { offsets in
                             draft.remove(atOffsets: offsets)
@@ -48,6 +64,8 @@ struct LabelsEditorView: View {
                     }
                 }
             }
+            .formStyle(.grouped)
+            .onAppear { fieldFocused = true }
         }
     }
 
@@ -57,8 +75,9 @@ struct LabelsEditorView: View {
 
     private func addLabel() {
         let value = trimmed
-        guard !value.isEmpty, !draft.contains(value) else { return }
-        draft.append(value)
+        guard !value.isEmpty else { return }
+        if !draft.contains(value) { draft.append(value) }
         newLabel = ""
+        fieldFocused = true
     }
 }

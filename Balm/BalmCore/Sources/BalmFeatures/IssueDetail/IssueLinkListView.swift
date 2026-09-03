@@ -3,35 +3,60 @@ import BalmModels
 import BalmDesignSystem
 
 struct IssueLinkListView: View {
-    @Environment(\.balmTheme) private var theme
     @Bindable var model: IssueDetailViewModel
 
     @State private var showingAddSheet = false
     @State private var pendingDelete: JiraIssueLink?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: theme.spacing.m) {
-            header
-            if model.details.issueLinks.isEmpty {
-                Text("No linked issues.")
-                    .font(theme.typography.callout)
-                    .foregroundStyle(theme.palette.mutedForeground)
-            } else {
-                ForEach(grouped, id: \.0) { (relationship, items) in
-                    Text(relationship.uppercased())
-                        .font(theme.typography.caption.weight(.semibold))
-                        .foregroundStyle(theme.palette.mutedForeground)
-                        .tracking(0.5)
-                    VStack(spacing: theme.spacing.xs) {
-                        ForEach(items) { link in
-                            LinkRow(
-                                link: link,
-                                onDelete: { pendingDelete = link }
-                            )
+        Group {
+            #if os(iOS)
+            Section {
+                if model.details.issueLinks.isEmpty {
+                    Text("No linked issues.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(grouped, id: \.0) { relationship, items in
+                    ForEach(items) { link in
+                        LinkRow(link: link, relationship: relationship, onDelete: { pendingDelete = link })
+                    }
+                }
+                Button {
+                    showingAddSheet = true
+                } label: {
+                    Label("Link an issue", systemImage: "link.badge.plus")
+                }
+            } header: {
+                Text("Linked issues")
+            }
+            #else
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeading("Linked issues", count: model.details.issueLinks.count) {
+                    Button {
+                        showingAddSheet = true
+                    } label: {
+                        Label("Link", systemImage: "link.badge.plus")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                if model.details.issueLinks.isEmpty {
+                    Text("No linked issues.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(grouped, id: \.0) { relationship, items in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(relationship.prefix(1).capitalized + relationship.dropFirst())
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(items) { link in
+                                LinkRow(link: link, relationship: relationship, onDelete: { pendingDelete = link })
+                            }
                         }
                     }
                 }
             }
+            #endif
         }
         .sheet(isPresented: $showingAddSheet) {
             AddLinkSheet(projectKey: model.issue?.projectKey ?? "") { type, direction, target in
@@ -56,20 +81,6 @@ struct IssueLinkListView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            SectionHeading("Linked Issues (\(model.details.issueLinks.count))")
-            Spacer()
-            Button {
-                showingAddSheet = true
-            } label: {
-                Label("Link Issue", systemImage: "link.badge.plus")
-            }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-        }
-    }
-
     private var grouped: [(String, [JiraIssueLink])] {
         let dict = Dictionary(grouping: model.details.issueLinks, by: \.relationship)
         return dict.keys.sorted().map { ($0, dict[$0] ?? []) }
@@ -77,29 +88,30 @@ struct IssueLinkListView: View {
 }
 
 private struct LinkRow: View {
-    @Environment(\.balmTheme) private var theme
     @Environment(\.openIssue) private var openIssue
     let link: JiraIssueLink
+    let relationship: String
     let onDelete: () -> Void
 
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: theme.spacing.s) {
+        HStack(spacing: 8) {
             Button {
                 guard !isOptimistic else { return }
                 openIssue(link.issue.asJiraIssue())
             } label: {
-                HStack(spacing: theme.spacing.s) {
+                HStack(spacing: 8) {
+                    if let status = link.issue.status?.name {
+                        StatusGlyph(status, size: 12)
+                    }
                     Text(link.issue.key)
-                        .font(theme.typography.caption.monospaced())
-                        .foregroundStyle(theme.palette.mutedForeground)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                     Text(link.issue.summary)
-                        .font(theme.typography.body)
-                        .foregroundStyle(isHovering ? theme.palette.primary : theme.palette.foreground)
                         .underline(isHovering)
                         .lineLimit(1)
-                    Spacer(minLength: theme.spacing.s)
+                    Spacer(minLength: 8)
                 }
                 .contentShape(Rectangle())
             }
@@ -111,16 +123,13 @@ private struct LinkRow: View {
             .help("Open \(link.issue.key)")
             #endif
 
-            if let status = link.issue.status?.name {
-                StatusChip(status: status)
-            }
             if !isOptimistic {
                 Menu {
-                    Button("Remove Link", systemImage: "trash", role: .destructive, action: onDelete)
+                    Button("Remove link", systemImage: "trash", role: .destructive, action: onDelete)
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(theme.palette.mutedForeground)
-                        .padding(.horizontal, theme.spacing.xs)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -128,10 +137,10 @@ private struct LinkRow: View {
                 ProgressView().controlSize(.small)
             }
         }
-        .padding(theme.spacing.s)
-        .background(theme.palette.secondary.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: theme.radii.sm))
+        .padding(.vertical, 3)
         .opacity(isOptimistic ? 0.7 : 1.0)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(relationship) \(link.issue.key), \(link.issue.summary)")
     }
 
     private var isOptimistic: Bool { link.id.hasPrefix("tmp-link-") }

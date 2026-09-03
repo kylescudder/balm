@@ -4,35 +4,32 @@ import BalmDesignSystem
 
 struct TransitionPickerView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.balmTheme) private var theme
     let transitions: [JiraTransition]
     let currentStatus: JiraStatus
     let onSelect: (JiraTransition) -> Void
 
     var body: some View {
-        PickerScaffold(title: "Move to") {
-            List {
-                if transitions.isEmpty {
-                    Text("No transitions available.")
-                        .foregroundStyle(theme.palette.mutedForeground)
-                } else {
-                    ForEach(transitions) { transition in
-                        Button {
-                            onSelect(transition)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                StatusChip(status: transition.to.name)
-                                Spacer()
-                                if transition.to.name == currentStatus.name {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(theme.palette.primary)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
+        PickerScaffold(title: "Status") {
+            KeyboardFilterList(
+                items: transitions,
+                prompt: "Filter statuses",
+                emptyText: transitions.isEmpty ? "No transitions are available from here." : "No statuses match.",
+                initialSelection: transitions.first { $0.to.name == currentStatus.name },
+                filterText: { "\(StatusNormaliser.normalise($0.to.name)) \($0.name)" },
+                onActivate: { transition in
+                    onSelect(transition)
+                    dismiss()
+                }
+            ) { transition in
+                HStack(spacing: 10) {
+                    StatusLabel(status: transition.to.name)
+                    Spacer()
+                    if transition.to.name == currentStatus.name {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.tint)
                     }
                 }
+                .contentShape(Rectangle())
             }
         }
     }

@@ -33,7 +33,7 @@ public struct AppRootView: View {
         // screen instead of stranding the user on raw HTTP errors.
         .onReceive(NotificationCenter.default.publisher(for: .balmSessionExpired)) { _ in
             guard case .signedIn = env.authState else { return }
-            env.toaster.info("Your session has expired — please sign in again")
+            env.toaster.info("Your session has expired. Sign in again to continue.")
             Task { await env.signOut() }
         }
         .task {
@@ -48,7 +48,6 @@ private struct LoadingView: View {
         ZStack {
             ProgressView()
                 .controlSize(.large)
-                .tint(theme.palette.primary)
         }
     }
 }

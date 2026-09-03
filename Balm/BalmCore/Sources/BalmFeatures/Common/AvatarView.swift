@@ -1,9 +1,7 @@
 import SwiftUI
 import BalmModels
-import BalmDesignSystem
 
 struct AvatarView: View {
-    @Environment(\.balmTheme) private var theme
     let name: String?
     let avatarURL: URL?
     let size: CGFloat
@@ -36,10 +34,10 @@ struct AvatarView: View {
 
     private var initialsView: some View {
         Text(initials)
-            .font(.system(size: max(size * 0.42, 10), weight: .semibold))
+            .font(.system(size: max(size * 0.42, 9), weight: .semibold))
+            .foregroundStyle(.secondary)
             .frame(width: size, height: size)
-            .background(Circle().fill(theme.palette.secondary))
-            .foregroundStyle(theme.palette.foreground)
+            .background(.quaternary, in: Circle())
     }
 
     private var initials: String {
@@ -47,6 +45,20 @@ struct AvatarView: View {
         let parts = n.split(separator: " ")
         let i = parts.prefix(2).compactMap { $0.first.map(String.init) }
         return i.isEmpty ? "?" : i.joined().uppercased()
+    }
+}
+
+/// The dashed ring that stands in for "unassigned" at avatar size, so rows
+/// keep their alignment and the gap reads as a deliberate empty slot.
+struct UnassignedAvatar: View {
+    var size: CGFloat = 20
+
+    var body: some View {
+        Circle()
+            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            .foregroundStyle(.tertiary)
+            .frame(width: size, height: size)
+            .accessibilityLabel("Unassigned")
     }
 }
 

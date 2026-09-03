@@ -38,12 +38,12 @@ struct AttachmentListView: View {
     private var iosSections: some View {
         Section("Attachments") {
             PhotosPicker(selection: $photoSelection, matching: .images) {
-                Label("Add Photo", systemImage: "photo.on.rectangle")
+                Label("Add photo", systemImage: "photo.on.rectangle")
             }
             Button {
                 showingFileImporter = true
             } label: {
-                Label("Upload File", systemImage: "paperclip")
+                Label("Upload file", systemImage: "paperclip")
             }
 
             if model.details.attachments.isEmpty && model.inFlightUploads.isEmpty {
@@ -55,7 +55,7 @@ struct AttachmentListView: View {
                         ProgressView()
                         VStack(alignment: .leading) {
                             Text(upload.filename)
-                            Text("Uploading · \(ByteCountFormatter.string(fromByteCount: Int64(upload.size), countStyle: .file))")
+                            Text("Uploading, \(ByteCountFormatter.string(fromByteCount: Int64(upload.size), countStyle: .file))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -70,7 +70,7 @@ struct AttachmentListView: View {
                                 Text(attachment.filename)
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
-                                Text("\(prettySize(attachment.size))\(attachment.mimeType.map { " · \($0)" } ?? "")")
+                                Text("\(prettySize(attachment.size))\(attachment.mimeType.map { ", \($0)" } ?? "")")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -131,10 +131,10 @@ struct AttachmentListView: View {
         }
         .padding(theme.spacing.s)
         .background(
-            RoundedRectangle(cornerRadius: theme.radii.lg)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(
-                    isDropTargeted ? theme.palette.primary : Color.clear,
-                    style: StrokeStyle(lineWidth: 2, dash: [6, 4])
+                    isDropTargeted ? Color.accentColor : Color.clear,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
                 )
         )
         .dropDestination(for: URL.self) { urls, _ in
@@ -154,7 +154,7 @@ struct AttachmentListView: View {
                     Task { await model.uploadAttachment(fileURL: url) }
                 }
             case .failure(let error):
-                env.toaster.error("Couldn't open file: \(error.localizedDescription)")
+                env.toaster.report(error, "Couldn't open file")
             }
         }
         .confirmationDialog(
@@ -185,23 +185,21 @@ struct AttachmentListView: View {
     }
 
     private var header: some View {
-        HStack {
-            SectionHeading("Attachments (\(model.details.attachments.count))")
-            Spacer()
-            #if !os(macOS)
-            PhotosPicker(selection: $photoSelection, matching: .images) {
-                Label("Photo", systemImage: "photo.on.rectangle")
+        SectionHeading("Attachments", count: model.details.attachments.count) {
+            HStack(spacing: 8) {
+                #if !os(macOS)
+                PhotosPicker(selection: $photoSelection, matching: .images) {
+                    Label("Photo", systemImage: "photo.on.rectangle")
+                }
+                .buttonStyle(.borderless)
+                #endif
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    Label("Upload", systemImage: "paperclip")
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            #endif
-            Button {
-                showingFileImporter = true
-            } label: {
-                Label("Upload", systemImage: "paperclip")
-            }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
         }
     }
 
@@ -209,10 +207,10 @@ struct AttachmentListView: View {
     private var content: some View {
         if model.details.attachments.isEmpty && model.inFlightUploads.isEmpty {
             Text("No attachments. Drop files here or use Upload.")
-                .font(theme.typography.callout)
-                .foregroundStyle(theme.palette.mutedForeground)
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, theme.spacing.l)
+                .padding(.vertical, theme.spacing.s)
         } else {
             VStack(spacing: theme.spacing.s) {
                 ForEach(model.inFlightUploads) { upload in
@@ -237,7 +235,7 @@ struct AttachmentListView: View {
                 Task { await model.uploadAttachment(fileURL: url) }
             }
         case .failure(let error):
-            env.toaster.error("Couldn't open file: \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't open file")
         }
     }
 
@@ -274,7 +272,7 @@ struct AttachmentListView: View {
             let local = try await env.api.downloadAttachment(url: url, suggestedFilename: att.filename)
             previewURL = local
         } catch {
-            env.toaster.error("Couldn't open \(att.filename): \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't open \(att.filename)")
         }
     }
 
@@ -308,16 +306,13 @@ private struct InFlightRow: View {
             ProgressView()
                 .controlSize(.small)
                 .frame(width: 36, height: 36)
-                .background(theme.palette.secondary)
-                .clipShape(RoundedRectangle(cornerRadius: theme.radii.sm))
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(upload.filename)
-                    .font(theme.typography.body)
-                    .foregroundStyle(theme.palette.foreground)
                     .lineLimit(1)
-                Text("Uploading · \(ByteCountFormatter.string(fromByteCount: Int64(upload.size), countStyle: .file))")
-                    .font(theme.typography.caption)
-                    .foregroundStyle(theme.palette.mutedForeground)
+                Text("Uploading, \(ByteCountFormatter.string(fromByteCount: Int64(upload.size), countStyle: .file))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -336,17 +331,15 @@ private struct AttachmentRow: View {
         HStack(spacing: theme.spacing.m) {
             iconOrThumbnail
                 .frame(width: 36, height: 36)
-                .background(theme.palette.secondary)
-                .clipShape(RoundedRectangle(cornerRadius: theme.radii.sm))
+                .background(.quaternary)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(attachment.filename)
-                    .font(theme.typography.body)
-                    .foregroundStyle(theme.palette.foreground)
                     .lineLimit(1)
-                Text("\(prettySize(attachment.size))\(attachment.mimeType.map { " · \($0)" } ?? "")")
-                    .font(theme.typography.caption)
-                    .foregroundStyle(theme.palette.mutedForeground)
+                Text("\(prettySize(attachment.size))\(attachment.mimeType.map { ", \($0)" } ?? "")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             if isPreparingPreview {
@@ -357,7 +350,7 @@ private struct AttachmentRow: View {
                 Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             } label: {
                 Image(systemName: "ellipsis")
-                    .foregroundStyle(theme.palette.mutedForeground)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, theme.spacing.xs)
             }
             .menuStyle(.borderlessButton)
@@ -373,11 +366,11 @@ private struct AttachmentRow: View {
         if attachment.isImage, let url = attachment.thumbnail ?? attachment.content {
             JiraImageView(url: url, contentMode: .fill) { _ in
                 Image(systemName: "photo")
-                    .foregroundStyle(theme.palette.mutedForeground)
+                    .foregroundStyle(.secondary)
             }
         } else {
             Image(systemName: systemImage(for: attachment.mimeType))
-                .foregroundStyle(theme.palette.mutedForeground)
+                .foregroundStyle(.secondary)
         }
     }
 

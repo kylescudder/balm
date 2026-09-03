@@ -1,5 +1,7 @@
 import SwiftUI
 import Observation
+import BalmModels
+import BalmAPI
 import BalmDesignSystem
 
 @MainActor
@@ -44,6 +46,13 @@ public final class Toaster {
     }
     public func error(_ message: String) { show(message, kind: .error, duration: 4.0) }
 
+    /// Reports a failure as "<context>: <description>", except for a cancelled
+    /// request, which the user caused and does not need to hear about.
+    public func report(_ error: Error, _ context: String) {
+        guard !error.isCancellation else { return }
+        self.error("\(context): \(error.localizedDescription)")
+    }
+
     public func show(
         _ message: String,
         kind: Toast.Kind,
@@ -70,72 +79,67 @@ public final class Toaster {
 }
 
 struct ToastOverlayView: View {
-    @Environment(\.balmTheme) private var theme
     let toaster: Toaster
 
     var body: some View {
-        VStack(spacing: theme.spacing.s) {
+        VStack(spacing: 8) {
             ForEach(toaster.toasts) { toast in
                 ToastBubble(toast: toast, dismiss: { toaster.dismiss(toast.id) })
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .onTapGesture { toaster.dismiss(toast.id) }
             }
         }
-        .padding(theme.spacing.l)
+        .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .allowsHitTesting(!toaster.toasts.isEmpty)
         .animation(.spring(duration: 0.25), value: toaster.toasts.map(\.id))
     }
 }
 
+/// System material, hairline edge, the done glyph as the success mark.
 private struct ToastBubble: View {
     @Environment(\.balmTheme) private var theme
     let toast: Toaster.Toast
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: theme.spacing.s) {
-            Image(systemName: iconName)
-                .foregroundStyle(tint)
+        HStack(spacing: 10) {
+            icon
             Text(toast.message)
-                .font(theme.typography.body)
-                .foregroundStyle(theme.palette.foreground)
-            Spacer()
+                .font(.body)
+                .lineLimit(2)
+            Spacer(minLength: 4)
             ForEach(toast.actions) { action in
                 Button(action.title) {
                     action.handler()
                     dismiss()
                 }
                 .buttonStyle(.borderless)
-                .font(theme.typography.callout.weight(.semibold))
-                .foregroundStyle(tint)
+                .font(.callout.weight(.semibold))
             }
         }
-        .padding(.horizontal, theme.spacing.m)
-        .padding(.vertical, theme.spacing.s)
-        .background(theme.palette.card)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous)
-                .strokeBorder(tint.opacity(0.4))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(.quaternary, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
-        .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
-        .frame(maxWidth: 420)
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .frame(maxWidth: 440)
     }
 
-    private var tint: Color {
+    @ViewBuilder
+    private var icon: some View {
         switch toast.kind {
-        case .success: return theme.palette.color(for: .chart5)
-        case .info: return theme.palette.color(for: .chart1)
-        case .error: return theme.palette.destructive
-        }
-    }
-
-    private var iconName: String {
-        switch toast.kind {
-        case .success: return "checkmark.circle.fill"
-        case .info: return "info.circle.fill"
-        case .error: return "exclamationmark.triangle.fill"
+        case .success:
+            StatusGlyph(spec: StatusHealth.done.representativeGlyph, size: 16)
+        case .info:
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+        case .error:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
         }
     }
 }

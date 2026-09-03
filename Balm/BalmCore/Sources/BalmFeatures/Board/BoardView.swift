@@ -3,22 +3,18 @@ import BalmModels
 import BalmDesignSystem
 
 public struct BoardView: View {
-    @Environment(\.balmTheme) private var theme
     let columns: [BoardColumn]
-    @Binding var selection: JiraIssue?
     @Binding var columnSelection: String?
     var onColumnViewed: (() -> Void)?
     var onMove: ((String, BoardColumn) -> Void)?
 
     public init(
         columns: [BoardColumn],
-        selection: Binding<JiraIssue?>,
         columnSelection: Binding<String?>,
         onColumnViewed: (() -> Void)? = nil,
         onMove: ((String, BoardColumn) -> Void)? = nil
     ) {
         self.columns = columns
-        self._selection = selection
         self._columnSelection = columnSelection
         self.onColumnViewed = onColumnViewed
         self.onMove = onMove
@@ -32,45 +28,39 @@ public struct BoardView: View {
         #endif
     }
 
-    #if os(macOS)
     private var wideBoard: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: theme.spacing.m) {
+            HStack(alignment: .top, spacing: 12) {
                 ForEach(columns) { column in
-                    BoardColumnView(column: column, selection: $selection, onMove: onMove)
-                        .frame(width: 280)
+                    BoardColumnView(column: column, onMove: onMove)
+                        .frame(width: 268)
                 }
             }
-            .padding(theme.spacing.m)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
+        .background(BalmSurface.window)
     }
-    #else
+
+    #if !os(macOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @ViewBuilder
     private var adaptiveBoard: some View {
         if horizontalSizeClass == .regular {
-            // iPad in landscape: same horizontal scroll as Mac.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: theme.spacing.m) {
-                    ForEach(columns) { column in
-                        BoardColumnView(column: column, selection: $selection, onMove: onMove)
-                            .frame(width: 280)
-                    }
-                }
-                .padding(theme.spacing.m)
-            }
+            wideBoard
         } else {
-            // iPhone / iPad compact: paged TabView, one column fills width.
+            // iPhone: one column per page.
             TabView(selection: $columnSelection) {
                 ForEach(columns) { column in
-                    BoardColumnView(column: column, selection: $selection, onMove: onMove)
-                        .padding(theme.spacing.s)
+                    BoardColumnView(column: column, onMove: onMove)
+                        .padding(.horizontal, 10)
                         .tag(Optional(column.id))
                         .onAppear { onColumnViewed?() }
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
+            .background(BalmSurface.window)
         }
     }
     #endif

@@ -3,25 +3,30 @@ import BalmModels
 import BalmAPI
 import BalmDesignSystem
 
+/// The issue's fields. Status, priority and assignee are the three people
+/// change most, so they sit under the title as a strip of small buttons. The
+/// rest is a two-column grid on the Mac and a grouped Details section on iOS,
+/// in the same order on both. Which picker is open lives in the detail view's
+/// `editingField`, so the keyboard shortcuts and the buttons open the same
+/// sheet.
 struct IssueMetadataPanel: View {
-    @Environment(\.balmTheme) private var theme
     @Environment(AppEnvironment.self) private var env
     @Bindable var model: IssueDetailViewModel
+    @Binding var editingField: EditableField?
 
-    @State private var priorities: [JiraPriority] = []
-    @State private var sprints: [JiraSprint] = []
     @State private var components: [JiraComponent] = []
-    @State private var versions: [JiraVersion] = []
-    @State private var editingField: EditableField?
 
     var body: some View {
         let issue = model.issue ?? placeholderIssue
 
         Group {
             #if os(iOS)
-            iosSections(issue)
+            iosDetails(issue)
             #else
-            macInspectorRows(issue)
+            VStack(alignment: .leading, spacing: 16) {
+                IssueQuickProperties(model: model, editingField: $editingField)
+                grid(issue)
+            }
             #endif
         }
         .task(id: issue.projectKey) { await loadOptions(projectKey: issue.projectKey) }
@@ -30,32 +35,83 @@ struct IssueMetadataPanel: View {
         }
     }
 
-    #if os(iOS)
-    @ViewBuilder
-    private func iosSections(_ issue: JiraIssue) -> some View {
-        Section("Details") {
-            editableRow("Status", field: .status) { Text(StatusNormaliser.normalise(issue.status.name)) }
-            editableRow("Priority", field: .priority) { Text(issue.priority.name) }
-            editableRow("Assignee", field: .assignee) { assigneeValue(issue) }
+    // MARK: - macOS grid
+
+    #if !os(iOS)
+    private func grid(_ issue: JiraIssue) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            editableRow("Sprint", field: .sprint) { Text(issue.sprint?.name ?? "Backlog") }
+            editableRow("Due", field: .dueDate, key: "D") { optionalText(dueDateText(issue.dueDate)) }
+            editableRow("Labels", field: .labels, key: "L") { tags(issue.labels) }
+            editableRow("Components", field: .components, key: "M") { summaryText(issue.components.map(\.name)) }
+            editableRow("Fix version", field: .versions, key: "V") { summaryText(issue.fixVersions.map(\.name)) }
             readonlyRow("Reporter") { reporterValue(issue) }
             readonlyRow("Type") { Text(issue.issueType.name) }
-            editableRow("Sprint", field: .sprint) { Text(issue.sprint?.name ?? "Backlog") }
-            editableRow("Due", field: .dueDate) { optionalText(issue.dueDate) }
-            editableRow("Components", field: .components) { summaryText(issue.components.map(\.name)) }
-            editableRow("Fix Versions", field: .versions) { summaryText(issue.fixVersions.map(\.name)) }
-            editableRow("Labels", field: .labels) { summaryText(issue.labels) }
             if let name = issue.instanceName {
-                readonlyRow("Instance / Database") { Text(name) }
+                readonlyRow("Instance") { Text(name) }
             }
+            readonlyRow("Created") { datesText(issue) }
         }
+        .font(.callout)
+    }
 
-        Section("Dates") {
-            readonlyRow("Created") { dateText(issue.created) }
-            readonlyRow("Updated") { dateText(issue.updated) }
+    private func editableRow<V: View>(
+        _ title: String,
+        field: EditableField,
+        key: String? = nil,
+        @ViewBuilder value: () -> V
+    ) -> some View {
+        Button {
+            editingField = field
+        } label: {
+            row(title) { value() }
+        }
+        .buttonStyle(.plain)
+        .help(key.map { "Edit \(title.lowercased()) (\($0))" } ?? "Edit \(title.lowercased())")
+        .accessibilityLabel(title)
+        .accessibilityHint("Opens the \(title.lowercased()) picker")
+    }
+
+    private func readonlyRow<V: View>(_ title: String, @ViewBuilder value: () -> V) -> some View {
+        row(title) { value() }
+    }
+
+    private func row<V: View>(_ title: String, @ViewBuilder value: () -> V) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 96, alignment: .leading)
+            value()
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+    #endif
+
+    // MARK: - iOS details
+
+    #if os(iOS)
+    @ViewBuilder
+    private func iosDetails(_ issue: JiraIssue) -> some View {
+        Section("Details") {
+            editableCell("Sprint", field: .sprint) { Text(issue.sprint?.name ?? "Backlog") }
+            editableCell("Due", field: .dueDate) { optionalText(dueDateText(issue.dueDate)) }
+            editableCell("Labels", field: .labels) { tags(issue.labels) }
+            editableCell("Components", field: .components) { summaryText(issue.components.map(\.name)) }
+            editableCell("Fix version", field: .versions) { summaryText(issue.fixVersions.map(\.name)) }
+            LabeledContent("Reporter") { reporterValue(issue) }
+            LabeledContent("Type") { Text(issue.issueType.name) }
+            if let name = issue.instanceName {
+                LabeledContent("Instance") { Text(name) }
+            }
+            LabeledContent("Created") { datesText(issue) }
         }
     }
 
-    private func editableRow<V: View>(_ title: String, field: EditableField, @ViewBuilder value: () -> V) -> some View {
+    private func editableCell<V: View>(_ title: String, field: EditableField, @ViewBuilder value: () -> V) -> some View {
         Button {
             editingField = field
         } label: {
@@ -72,72 +128,9 @@ struct IssueMetadataPanel: View {
         }
         .foregroundStyle(.primary)
     }
-
-    private func readonlyRow<V: View>(_ title: String, @ViewBuilder value: () -> V) -> some View {
-        LabeledContent(title) {
-            value()
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.trailing)
-        }
-    }
     #endif
 
-    #if !os(iOS)
-    private func macInspectorRows(_ issue: JiraIssue) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            editableField("Status", field: .status) { StatusChip(status: issue.status.name) }
-            editableField("Priority", field: .priority) { Text(issue.priority.name) }
-            editableField("Assignee", field: .assignee) { assigneeValue(issue) }
-            readonlyField("Reporter") { reporterValue(issue) }
-            readonlyField("Type") { Text(issue.issueType.name) }
-            editableField("Sprint", field: .sprint) { Text(issue.sprint?.name ?? "Backlog") }
-            editableField("Due", field: .dueDate) { optionalText(issue.dueDate) }
-            editableField("Components", field: .components) { summaryText(issue.components.map(\.name)) }
-            if let name = issue.instanceName {
-                readonlyField("Instance / Database") { Text(name) }
-            }
-            editableField("Fix Versions", field: .versions) { summaryText(issue.fixVersions.map(\.name)) }
-            editableField("Labels", field: .labels) { summaryText(issue.labels) }
-            readonlyField("Created") { dateText(issue.created) }
-            readonlyField("Updated") { dateText(issue.updated) }
-        }
-        .font(theme.typography.body)
-        .foregroundStyle(theme.palette.foreground)
-    }
-
-    private func editableField<V: View>(_ title: String, field: EditableField, @ViewBuilder value: () -> V) -> some View {
-        Button {
-            editingField = field
-        } label: {
-            row(title, showsDisclosure: true) { value() }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityHint("Double click to edit")
-        .overlay(alignment: .bottom) { Divider().padding(.leading, theme.spacing.l) }
-    }
-
-    private func readonlyField<V: View>(_ title: String, @ViewBuilder value: () -> V) -> some View {
-        row(title, showsDisclosure: false) { value() }
-            .overlay(alignment: .bottom) { Divider().padding(.leading, theme.spacing.l) }
-    }
-
-    private func row<V: View>(_ title: String, showsDisclosure: Bool, @ViewBuilder value: () -> V) -> some View {
-        LabeledContent {
-            HStack(spacing: theme.spacing.xs) {
-                value()
-                    .multilineTextAlignment(.trailing)
-            }
-            .foregroundStyle(theme.palette.foreground)
-        } label: {
-            Text(title)
-                .foregroundStyle(theme.palette.mutedForeground)
-        }
-        .padding(.horizontal, theme.spacing.l)
-        .padding(.vertical, theme.spacing.s)
-        .contentShape(Rectangle())
-    }
-    #endif
+    // MARK: - Values
 
     @ViewBuilder
     private func optionalText(_ value: String?) -> some View {
@@ -151,20 +144,22 @@ struct IssueMetadataPanel: View {
             Text("None").foregroundStyle(.secondary)
         } else {
             Text(items.joined(separator: ", "))
-                .lineLimit(1)
-                .truncationMode(.tail)
         }
     }
 
     @ViewBuilder
-    private func assigneeValue(_ issue: JiraIssue) -> some View {
-        if let assignee = issue.assignee {
-            HStack(spacing: 6) {
-                AvatarView(name: assignee.displayName, avatarURL: assignee.avatarURL, size: 20)
-                Text(assignee.displayName)
-            }
+    private func tags(_ labels: [String]) -> some View {
+        if labels.isEmpty {
+            Text("None").foregroundStyle(.secondary)
         } else {
-            Text("Unassigned").foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                ForEach(labels.prefix(4), id: \.self) { LabelTag(text: $0) }
+                if labels.count > 4 {
+                    Text("+\(labels.count - 4)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -172,19 +167,40 @@ struct IssueMetadataPanel: View {
     private func reporterValue(_ issue: JiraIssue) -> some View {
         if let reporter = issue.reporter {
             HStack(spacing: 6) {
-                AvatarView(name: reporter.displayName, avatarURL: reporter.avatarURL, size: 20)
+                AvatarView(name: reporter.displayName, avatarURL: reporter.avatarURL, size: 16)
                 Text(reporter.displayName)
             }
         } else {
-            Text("—").foregroundStyle(.secondary)
+            Text("None").foregroundStyle(.secondary)
         }
     }
 
+    /// "3 Sep, updated 2 hours ago" in one line, secondary.
     @ViewBuilder
-    private func dateText(_ date: Date?) -> some View {
-        Text(date?.formatted(date: .abbreviated, time: .shortened) ?? "—")
-            .foregroundStyle(date == nil ? .secondary : .primary)
+    private func datesText(_ issue: JiraIssue) -> some View {
+        if let created = issue.created {
+            let createdText = created.formatted(date: .abbreviated, time: .omitted)
+            if let updated = issue.updated {
+                let formatter = RelativeDateTimeFormatter()
+                Text("\(createdText), updated \(formatter.localizedString(for: updated, relativeTo: Date()))")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(createdText).foregroundStyle(.secondary)
+            }
+        } else {
+            Text("None").foregroundStyle(.secondary)
+        }
     }
+
+    private func dueDateText(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: raw) else { return raw }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    // MARK: - Editors
 
     @ViewBuilder
     private func editor(for field: EditableField, issue: JiraIssue) -> some View {
@@ -198,7 +214,7 @@ struct IssueMetadataPanel: View {
                 Task { await model.setPriority(priority.name) }
             }
         case .assignee:
-            AssigneePickerView(projectKey: issue.projectKey, currentAccountID: nil) { user in
+            AssigneePickerView(projectKey: issue.projectKey, currentDisplayName: issue.assignee?.displayName) { user in
                 Task { await model.setAssignee(user) }
             }
         case .sprint:
@@ -231,21 +247,87 @@ struct IssueMetadataPanel: View {
 
     private func loadOptions(projectKey: String) async {
         guard !projectKey.isEmpty, projectKey != "—" else { return }
-        if let p = try? await env.api.send(MetadataEndpoints.Priorities()) { priorities = p }
         if let c = try? await env.api.send(ProjectEndpoints.Components(projectKeyOrId: projectKey)) { components = c }
-        if let v = try? await env.api.send(ProjectEndpoints.Versions(projectKeyOrId: projectKey)) { versions = v }
-        if let boards = try? await env.api.send(ProjectEndpoints.Boards(projectKeyOrId: projectKey)),
-           let board = boards.values.first,
-           let resp = try? await env.api.send(ProjectEndpoints.Sprints(boardID: board.id, states: ["active", "future"])) {
-            sprints = resp.values
-        }
     }
 
     private var placeholderIssue: JiraIssue {
         JiraIssue(
             id: "0",
             key: "—",
-            summary: "Loading…",
+            summary: "Loading",
+            status: JiraStatus(name: "—", statusCategory: JiraStatusCategory(key: "new", colorName: "blue")),
+            priority: JiraPriority(name: "—"),
+            issueType: JiraIssueType(name: "—")
+        )
+    }
+}
+
+/// Status, priority and assignee as a strip of small buttons under the title.
+/// Each opens the same keyboard-first picker its shortcut does.
+struct IssueQuickProperties: View {
+    @Bindable var model: IssueDetailViewModel
+    @Binding var editingField: EditableField?
+
+    var body: some View {
+        let issue = model.issue ?? placeholder
+        HStack(spacing: 8) {
+            Button {
+                editingField = .status
+            } label: {
+                HStack(spacing: 6) {
+                    StatusLabel(status: issue.status.name, size: 13)
+                    chevron
+                }
+            }
+            .help("Change status (S)")
+
+            Button {
+                editingField = .priority
+            } label: {
+                HStack(spacing: 6) {
+                    PriorityIcon(priority: issue.priority, size: 12)
+                    Text(issue.priority.name.isEmpty ? "Priority" : issue.priority.name)
+                        .lineLimit(1)
+                    chevron
+                }
+            }
+            .help("Change priority (P)")
+
+            Button {
+                editingField = .assignee
+            } label: {
+                HStack(spacing: 6) {
+                    if let assignee = issue.assignee {
+                        AvatarView(name: assignee.displayName, avatarURL: assignee.avatarURL, size: 16)
+                        Text(assignee.displayName)
+                            .lineLimit(1)
+                    } else {
+                        Image(systemName: "person.crop.circle.dashed")
+                            .foregroundStyle(.secondary)
+                        Text("Unassigned")
+                            .lineLimit(1)
+                    }
+                    chevron
+                }
+            }
+            .help("Change assignee (A)")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .font(.callout)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.down")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+    }
+
+    private var placeholder: JiraIssue {
+        JiraIssue(
+            id: "0",
+            key: "—",
+            summary: "Loading",
             status: JiraStatus(name: "—", statusCategory: JiraStatusCategory(key: "new", colorName: "blue")),
             priority: JiraPriority(name: "—"),
             issueType: JiraIssueType(name: "—")

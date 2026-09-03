@@ -126,7 +126,7 @@ struct AddLinkSheet: View {
                 ]
             }
         } catch {
-            env.toaster.error("Couldn't load link types: \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't load link types")
         }
     }
 

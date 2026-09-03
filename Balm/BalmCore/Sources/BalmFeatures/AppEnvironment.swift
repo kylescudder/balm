@@ -24,6 +24,7 @@ public final class AppEnvironment {
     public let networkMonitor: NetworkMonitor
     public let activeProjectStore: ActiveProjectStore
     public let inboxStore: InboxStore
+    public let projectListStore: ProjectListStore
 
     public init(
         oauth: AtlassianOAuth,
@@ -48,6 +49,7 @@ public final class AppEnvironment {
         // working store.
         let monitor = networkMonitor
         self.inboxStore = inboxStore ?? InboxStore(api: api, isOnline: { monitor.isOnline }, toaster: toaster)
+        self.projectListStore = ProjectListStore(api: api)
     }
 
     public func bootstrap() async {
@@ -100,6 +102,8 @@ public final class AppEnvironment {
         }
         // Forget the user's active project — next sign-in starts fresh.
         activeProjectStore.set(nil)
+        projectListStore.reset()
+        ProjectAvatarCache.shared.reset()
         inboxStore.stopAndReset()
         authState = .signedOut
     }

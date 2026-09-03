@@ -3,9 +3,11 @@ import BalmModels
 import BalmAPI
 import BalmDesignSystem
 
-/// First-run project picker (and "Change Project…" surface). Native search bar
-/// plus a tappable list: choosing a project selects it and proceeds in one tap,
-/// so there's no Continue button to fight the system search's nav-bar takeover.
+/// Two jobs, one view. On first run it is the welcome screen: who you are
+/// signed in as, the projects you opened most recently as tiles, and every
+/// project you can see in a grid with its own avatar. As the "Change project"
+/// sheet it is the same grid without the welcome. Choosing a project selects it
+/// and proceeds in one click.
 public struct ProjectChooserView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -13,9 +15,6 @@ public struct ProjectChooserView: View {
 
     let isFirstRun: Bool
 
-    @State private var projects: [JiraProject] = []
-    @State private var isLoading = false
-    @State private var error: String?
     @State private var query = ""
 
     public init(isFirstRun: Bool = false) {
@@ -25,7 +24,7 @@ public struct ProjectChooserView: View {
     public var body: some View {
         NavigationStack {
             content
-                .navigationTitle(isFirstRun ? "Welcome to Balm" : "Change Project")
+                .navigationTitle(isFirstRun ? "Welcome to Balm" : "Change project")
                 #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
@@ -35,83 +34,170 @@ public struct ProjectChooserView: View {
                 #else
                 .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter projects")
                 #endif
-                .task { await load() }
+                .task { await env.projectListStore.loadIfNeeded() }
         }
-        // Cap and centre the width so first-run (shown as the full-window root
-        // on macOS) doesn't stretch rows across the whole display.
-        #if os(macOS)
-        .frame(minWidth: 480, idealWidth: 600, maxWidth: 680, minHeight: 560, maxHeight: .infinity)
-        #endif
+        .modifier(SheetSizing(isSheet: !isFirstRun))
     }
 
-    /// Tapping a project is the action: store it and proceed. On first run,
-    /// setting the active project swaps the root away from this chooser.
     private func select(_ project: JiraProject) {
         env.activeProjectStore.set(project)
         Haptics.fire(.success)
         if !isFirstRun { dismiss() }
     }
 
+    // MARK: - Content
+
     @ViewBuilder
     private var content: some View {
-        if isLoading && projects.isEmpty {
-            ProgressView("Loading projects…")
+        let store = env.projectListStore
+        if store.isLoading && store.projects.isEmpty {
+            ProgressView("Loading your projects")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error {
+        } else if let error = store.error, store.projects.isEmpty {
             ContentUnavailableView {
                 Label("Couldn't load projects", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(error)
             } actions: {
-                Button("Retry") { Task { await load(force: true) } }
+                Button("Try again") { Task { await store.reload() } }
                     .buttonStyle(.borderedProminent)
             }
         } else if filtered.isEmpty {
             ContentUnavailableView.search(text: query)
+        } else if isFirstRun {
+            welcome
         } else {
-            List {
-                ForEach(filtered) { project in
-                    Button { select(project) } label: {
-                        ProjectRow(
-                            project: project,
-                            isCurrent: project.id == env.activeProjectStore.project?.id
-                        )
+            changeProjectList
+        }
+    }
+
+    /// The welcome layout: identity, the question, recent tiles, the full grid.
+    private var welcome: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 36) {
+                identity
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Which project do you work in most?")
+                        .font(theme.typography.issueTitle)
+                    Text("It opens first every time you launch Balm. Every other project stays one click away in the sidebar.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: 560, alignment: .leading)
+                }
+
+                if isSearching == false, !recentProjects.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionTitle("Recent", count: nil)
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 190, maximum: 250), spacing: 12)],
+                            alignment: .leading,
+                            spacing: 12
+                        ) {
+                            ForEach(recentProjects) { project in
+                                ProjectTile(project: project) { select(project) }
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    sectionTitle(isSearching ? "Matches" : "All projects", count: filtered.count)
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 300), spacing: 12)],
+                        alignment: .leading,
+                        spacing: 2
+                    ) {
+                        ForEach(filtered) { project in
+                            ProjectGridRow(project: project) { select(project) }
+                        }
+                    }
                 }
             }
-            #if os(macOS)
-            .listStyle(.inset)
-            #else
-            .listStyle(.insetGrouped)
-            #endif
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if isFirstRun {
-                    heroHeader
-                        .padding(.bottom, theme.spacing.m)
-                        .background(.bar)
-                }
+            .frame(maxWidth: 1040, alignment: .leading)
+            .padding(.horizontal, 40)
+            .padding(.top, 28)
+            .padding(.bottom, 40)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// The mark, the site, and who is signed in.
+    private var identity: some View {
+        HStack(spacing: 16) {
+            Image("BalmMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(siteName ?? "Balm")
+                    .font(.title2.weight(.semibold))
+                Text(userName.map { "Signed in as \($0)" } ?? "Signed in")
+                    .foregroundStyle(.secondary)
             }
         }
     }
 
-    private var heroHeader: some View {
-        VStack(spacing: theme.spacing.s) {
-            Image(systemName: "rectangle.stack.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(theme.palette.primary)
-                .padding(.top, theme.spacing.m)
-            Text("Pick your project")
-                .font(theme.typography.title2)
-                .foregroundStyle(theme.palette.foreground)
-            Text("Choose the project you work in most. You can change this any time from Settings.")
-                .font(theme.typography.callout)
-                .foregroundStyle(theme.palette.mutedForeground)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, theme.spacing.xl)
-                .padding(.bottom, theme.spacing.s)
+    private func sectionTitle(_ title: String, count: Int?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            if let count {
+                Text(count, format: .number)
+                    .font(.headline.weight(.regular))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    /// The compact sheet used to switch project once inside the app.
+    private var changeProjectList: some View {
+        List {
+            if !isSearching, !recentProjects.isEmpty {
+                Section("Recent") {
+                    ForEach(recentProjects) { project in
+                        listRow(project)
+                    }
+                }
+            }
+            Section(isSearching ? "Matches" : "All projects") {
+                ForEach(filtered) { project in
+                    listRow(project)
+                }
+            }
+        }
+        #if os(macOS)
+        .listStyle(.inset)
+        #else
+        .listStyle(.insetGrouped)
+        #endif
+        .refreshable { await env.projectListStore.reload() }
+    }
+
+    private func listRow(_ project: JiraProject) -> some View {
+        Button { select(project) } label: {
+            HStack(spacing: 12) {
+                ProjectAvatar(project: project, size: 28, isActive: isCurrent(project))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(project.name)
+                    Text(project.key)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Spacer()
+                if isCurrent(project) {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ToolbarContentBuilder
@@ -123,63 +209,124 @@ public struct ProjectChooserView: View {
         }
     }
 
+    // MARK: - Data
+
+    private var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var recentProjects: [JiraProject] {
+        env.projectListStore.recent
+    }
+
     private var filtered: [JiraProject] {
-        guard !query.isEmpty else { return projects }
+        let projects = env.projectListStore.projects
+        guard isSearching else { return projects }
         let q = query.lowercased()
         return projects.filter {
             $0.name.lowercased().contains(q) || $0.key.lowercased().contains(q)
         }
     }
 
-    private func load(force: Bool = false) async {
-        if !force && !projects.isEmpty { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let response = try await env.api.send(ProjectEndpoints.List())
-            projects = response.values.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
-        }
+    private func isCurrent(_ project: JiraProject) -> Bool {
+        project.id == env.activeProjectStore.project?.id
+    }
+
+    private var siteName: String? {
+        if case .signedIn(let siteName, _, _) = env.authState { return siteName }
+        return nil
+    }
+
+    private var userName: String? {
+        if case .signedIn(_, _, let user) = env.authState { return user?.displayName }
+        return nil
     }
 }
 
-private struct ProjectRow: View {
-    @Environment(\.balmTheme) private var theme
+/// A recently opened project as a tile: avatar, name, key, on a material card.
+private struct ProjectTile: View {
     let project: JiraProject
-    var isCurrent: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: theme.spacing.m) {
-            ZStack {
-                RoundedRectangle(cornerRadius: theme.radii.sm)
-                    .fill(theme.palette.secondary)
-                    .frame(width: 32, height: 32)
-                Text(String(project.key.prefix(2)))
-                    .font(theme.typography.caption.weight(.semibold))
-                    .foregroundStyle(theme.palette.foreground)
-            }
-            VStack(alignment: .leading, spacing: 2) {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                ProjectAvatar(project: project, size: 36)
+                Spacer(minLength: 0)
                 Text(project.name)
-                    .font(theme.typography.body)
-                    .foregroundStyle(theme.palette.foreground)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
                 Text(project.key)
-                    .font(theme.typography.caption.monospaced())
-                    .foregroundStyle(theme.palette.mutedForeground)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            Spacer()
-            if isCurrent {
-                Image(systemName: "checkmark")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(theme.palette.primary)
-            } else {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(theme.palette.mutedForeground)
-            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 124, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isHovered ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), lineWidth: isHovered ? 1.5 : 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .accessibilityLabel("\(project.name), \(project.key)")
+    }
+}
+
+/// One project in the full grid: avatar, name, key. Highlights on hover.
+private struct ProjectGridRow: View {
+    let project: JiraProject
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ProjectAvatar(project: project, size: 22)
+                Text(project.name)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(project.key)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel("\(project.name), \(project.key)")
+    }
+}
+
+/// The sheet gets a fixed footprint on macOS; the first-run window is left to
+/// the scene so the grid can use the whole window.
+private struct SheetSizing: ViewModifier {
+    let isSheet: Bool
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        if isSheet {
+            content.frame(minWidth: 520, idealWidth: 620, maxWidth: 720, minHeight: 560, maxHeight: .infinity)
+        } else {
+            content.frame(minWidth: 720, minHeight: 520)
+        }
+        #else
+        content
+        #endif
     }
 }

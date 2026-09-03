@@ -5,7 +5,6 @@ import BalmDesignSystem
 
 struct SprintPickerView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.balmTheme) private var theme
     @Environment(AppEnvironment.self) private var env
 
     let projectKey: String
@@ -14,61 +13,66 @@ struct SprintPickerView: View {
 
     @State private var sprints: [JiraSprint] = []
     @State private var isLoading = false
-    @State private var searchText = ""
+
+    enum Choice: Hashable {
+        case backlog
+        case sprint(JiraSprint)
+    }
+
+    private var choices: [Choice] {
+        [.backlog] + sprints.map(Choice.sprint)
+    }
+
+    private var current: Choice {
+        guard let id = currentSprintID, let sprint = sprints.first(where: { $0.id == id }) else { return .backlog }
+        return .sprint(sprint)
+    }
 
     var body: some View {
         PickerScaffold(title: "Sprint") {
-            List {
-                Button {
-                    onSelect(nil)
-                    dismiss()
-                } label: {
-                    HStack {
-                        Label("Backlog", systemImage: "tray.full")
-                        Spacer()
-                        if currentSprintID == nil { Image(systemName: "checkmark") }
+            KeyboardFilterList(
+                items: choices,
+                prompt: "Filter sprints",
+                isLoading: isLoading,
+                emptyText: "No sprints match.",
+                initialSelection: current,
+                filterText: { choice in
+                    switch choice {
+                    case .backlog: return "Backlog"
+                    case .sprint(let sprint): return "\(sprint.name) \(sprint.state)"
                     }
+                },
+                onActivate: { choice in
+                    switch choice {
+                    case .backlog: onSelect(nil)
+                    case .sprint(let sprint): onSelect(sprint)
+                    }
+                    dismiss()
                 }
-
-                if isLoading {
-                    ProgressView()
-                } else if filteredSprints.isEmpty {
-                    ContentUnavailableView("No sprints", systemImage: "calendar")
-                } else {
-                    ForEach(filteredSprints, id: \.id) { sprint in
-                        Button {
-                            onSelect(sprint)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(sprint.name)
-                                    if !sprint.state.isEmpty {
-                                        Text(sprint.state.capitalized)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                if sprint.id == currentSprintID {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(theme.palette.primary)
-                                }
+            ) { choice in
+                HStack(spacing: 10) {
+                    switch choice {
+                    case .backlog:
+                        Label("Backlog", systemImage: "tray")
+                    case .sprint(let sprint):
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(sprint.name)
+                            if !sprint.state.isEmpty {
+                                Text(sprint.state.capitalized)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
+                    Spacer()
+                    if choice == current {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.tint)
+                    }
                 }
+                .contentShape(Rectangle())
             }
-            .searchable(text: $searchText, prompt: "Search sprints")
             .task { await load() }
-        }
-    }
-
-    private var filteredSprints: [JiraSprint] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return sprints }
-        return sprints.filter {
-            $0.name.localizedStandardContains(query) || $0.state.localizedStandardContains(query)
         }
     }
 
@@ -82,12 +86,9 @@ struct SprintPickerView: View {
                 sprints = []
                 return
             }
-            let resp = try await env.api.send(
-                ProjectEndpoints.Sprints(boardID: board.id, states: ["active", "future"])
-            )
-            sprints = resp.values
+            sprints = try await env.api.allSprints(boardID: board.id, states: ["active", "future"])
         } catch {
-            env.toaster.error("Couldn't load sprints: \(error.localizedDescription)")
+            env.toaster.report(error, "Couldn't load sprints")
         }
     }
 }

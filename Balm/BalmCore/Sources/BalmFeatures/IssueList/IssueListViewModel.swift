@@ -77,23 +77,52 @@ public final class IssueListViewModel {
     /// resolved from create-metadata. Threaded into the JQL builder.
     private var componentFieldJQL = "component"
 
-    /// Issues grouped into status columns, ordered for the Kanban board.
-    /// Columns are bucketed by normalised status name, sorted by
-    /// (group rank, statusCategory.key precedence, alphabetical).
+    /// Issues grouped into status columns, ordered for the Kanban board. The
+    /// pinned workflow columns come first in their fixed order (To Do, Blocked,
+    /// Iteration Required, In Progress, Current Active Issue); everything else
+    /// follows the list's grouping: health, then how far along the glyph is,
+    /// then statusCategory precedence, then alphabetically.
     public var columns: [BoardColumn] {
         Self.columns(from: issues)
     }
 
-    static func columns(from issues: [JiraIssue]) -> [BoardColumn] {
+    /// Issues grouped by health for the list, in `StatusHealth.allCases` order:
+    /// blocked first, then in progress, waiting, to do, done, closed. Order
+    /// within a group is the fetch order.
+    public var healthSections: [IssueHealthSection] {
+        Self.healthSections(from: issues)
+    }
+
+    nonisolated static func healthSections(from issues: [JiraIssue]) -> [IssueHealthSection] {
+        let grouped = Dictionary(grouping: issues) { StatusNormaliser.health($0.status.name) }
+        return StatusHealth.allCases.compactMap { health in
+            grouped[health].map { IssueHealthSection(health: health, issues: $0) }
+        }
+    }
+
+    nonisolated static func columns(from issues: [JiraIssue]) -> [BoardColumn] {
         let grouped = Dictionary(grouping: issues) { issue in
             StatusNormaliser.normalise(issue.status.name)
         }
         let categoryPrecedence = ["new": 0, "indeterminate": 1, "done": 2]
 
+        let healthOrder = StatusHealth.allCases
         let sortedKeys: [String] = grouped.keys.sorted { lhs, rhs in
-            let lr = StatusNormaliser.groupRank(lhs)
-            let rr = StatusNormaliser.groupRank(rhs)
-            if lr != rr { return lr < rr }
+            let lPin = StatusNormaliser.pinnedColumnIndex(lhs) ?? Int.max
+            let rPin = StatusNormaliser.pinnedColumnIndex(rhs) ?? Int.max
+            if lPin != rPin { return lPin < rPin }
+
+            let lg = StatusNormaliser.glyph(for: lhs)
+            let rg = StatusNormaliser.glyph(for: rhs)
+            let lh = healthOrder.firstIndex(of: lg.health) ?? healthOrder.count
+            let rh = healthOrder.firstIndex(of: rg.health) ?? healthOrder.count
+            if lh != rh { return lh < rh }
+
+            // Within a health group, less progress comes first: In Progress
+            // before In PR before In Review.
+            let lf = lg.fill.fraction ?? 0
+            let rf = rg.fill.fraction ?? 0
+            if lf != rf { return lf < rf }
 
             // Within a group, prefer the statusCategory.key precedence
             // from the first issue in the bucket.
@@ -143,28 +172,30 @@ public final class IssueListViewModel {
                 }
                 return
             }
-            let sprintsResponse: ProjectEndpoints.Sprints.PagedResponse
+            let sprints: [JiraSprint]
             do {
-                sprintsResponse = try await api.send(
-                    ProjectEndpoints.Sprints(boardID: board.id, states: ["active", "future"])
-                )
+                // Every page: reconciling the remembered selection against a
+                // partial list would drop a live sprint that sits past page one.
+                sprints = try await api.allSprints(boardID: board.id, states: ["active", "future"])
             } catch {
+                if error.isCancellation { return }
                 // Kanban boards have no sprints (`/sprint` returns 400). That's
                 // expected, not an error — fall back to backlog, which lists
                 // every issue not in a sprint (i.e. all of them). No toast.
                 useBacklogOnly()
                 return
             }
-            availableSprints = [JiraSprint.backlog] + sprintsResponse.values
+            availableSprints = [JiraSprint.backlog] + sprints
+            dropFinishedSprintsFromSelection()
 
             // Default selection: prefer active sprints; fall back to all
             // future sprints; fall back to backlog so the user sees something
             // on first load. Persisted selection (when present) takes precedence.
             if selectedSprintIDs.isEmpty {
-                let active = sprintsResponse.values
+                let active = sprints
                     .filter { $0.state.uppercased() == "ACTIVE" }
                     .map(\.name)
-                let future = sprintsResponse.values
+                let future = sprints
                     .filter { $0.state.uppercased() == "FUTURE" }
                     .map(\.name)
                 if !active.isEmpty {
@@ -176,10 +207,12 @@ public final class IssueListViewModel {
                 }
             }
         } catch {
+            // The view went away mid-load; nothing to report.
+            if error.isCancellation { return }
             // No board / no permission / network blip — fall back to backlog so
             // the user at least has something, and surface the failure.
             useBacklogOnly()
-            toaster?.error("Sprints unavailable: \(error.localizedDescription)")
+            toaster?.report(error, "Sprints unavailable")
         }
     }
 
@@ -188,6 +221,38 @@ public final class IssueListViewModel {
         if selectedSprintIDs.isEmpty {
             selectedSprintIDs = [JiraSprint.backlog.name]
         }
+    }
+
+    /// A remembered sprint that has since been completed is no longer offered
+    /// by Jira. Drop it quietly, show the backlog if nothing else is selected,
+    /// and tell the user once so they pick a new sprint.
+    private func dropFinishedSprintsFromSelection() {
+        let result = Self.reconciledSprintSelection(selectedSprintIDs, available: availableSprints)
+        guard !result.removed.isEmpty else { return }
+        selectedSprintIDs = result.kept
+        Self.persistSprintSelection(result.kept, projectKey: project.key)
+        let finished = result.removed.sorted().joined(separator: ", ")
+        if result.kept == [JiraSprint.backlog.name] {
+            toaster?.info("\(finished) has finished. Showing the backlog until you pick a new sprint.")
+        } else {
+            toaster?.info("\(finished) has finished and was removed from your selection.")
+        }
+    }
+
+    /// Keeps the selected entries that still name or identify an available
+    /// sprint; if none remain, falls back to the backlog.
+    nonisolated static func reconciledSprintSelection(
+        _ selected: Set<String>,
+        available: [JiraSprint]
+    ) -> (kept: Set<String>, removed: Set<String>) {
+        let names = Set(available.map(\.name))
+        let ids = Set(available.map(\.id))
+        let kept = selected.filter { names.contains($0) || ids.contains($0) }
+        let removed = selected.subtracting(kept)
+        if kept.isEmpty && !removed.isEmpty {
+            return ([JiraSprint.backlog.name], removed)
+        }
+        return (kept, removed)
     }
 
     public func setSprintSelection(_ ids: Set<String>) {
@@ -284,13 +349,12 @@ public final class IssueListViewModel {
                 for: IssueListCacheKey(projectID: project.id, sprintNames: names, definition: userDefinition)
             )
             loadState = .loaded
-        } catch is CancellationError {
-            return
         } catch {
+            if error.isCancellation { return }
             if showLoading || issues.isEmpty {
                 loadState = .failed(error.localizedDescription)
             } else {
-                toaster?.error("Couldn't refresh issues: \(error.localizedDescription)")
+                toaster?.report(error, "Couldn't refresh issues")
             }
             return
         }
@@ -432,10 +496,8 @@ public final class IssueListViewModel {
                 if Task.isCancelled { return }
                 self.globalResults = results
                 self.searchState = .loaded
-            } catch is CancellationError {
-                return
             } catch {
-                if Task.isCancelled { return }
+                if Task.isCancelled || error.isCancellation { return }
                 self.searchState = .failed(error.localizedDescription)
             }
         }
@@ -548,4 +610,11 @@ public final class IssueListViewModel {
         let arr = UserDefaults.standard.array(forKey: key(for: projectKey)) as? [String] ?? []
         return Set(arr)
     }
+}
+
+/// One grouped section of the issue list.
+public struct IssueHealthSection: Identifiable, Sendable, Hashable {
+    public let health: StatusHealth
+    public let issues: [JiraIssue]
+    public var id: StatusHealth { health }
 }
