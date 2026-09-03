@@ -21,3 +21,16 @@ extension JiraError: LocalizedError {
         }
     }
 }
+
+public extension Error {
+    /// True for every shape a cancelled request takes: Swift's
+    /// `CancellationError`, URLSession's `URLError.cancelled` (whose description
+    /// is the bare word "cancelled"), and `JiraError.cancelled`. A cancelled
+    /// request is never worth a toast.
+    var isCancellation: Bool {
+        if self is CancellationError { return true }
+        if let urlError = self as? URLError, urlError.code == .cancelled { return true }
+        if let jiraError = self as? JiraError, jiraError == .cancelled { return true }
+        return false
+    }
+}

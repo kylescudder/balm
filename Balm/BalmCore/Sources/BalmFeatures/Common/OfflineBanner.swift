@@ -1,19 +1,14 @@
 import SwiftUI
-import BalmDesignSystem
 
 struct OfflineBanner: View {
-    @Environment(\.balmTheme) private var theme
-
     var body: some View {
-        HStack(spacing: theme.spacing.s) {
-            Image(systemName: "wifi.slash")
-            Text("Offline — showing cached data.")
-                .font(theme.typography.caption.weight(.semibold))
-            Spacer()
-        }
-        .foregroundStyle(theme.palette.destructiveForeground)
-        .padding(.horizontal, theme.spacing.m)
-        .padding(.vertical, theme.spacing.s)
-        .background(theme.palette.destructive)
+        Label("Offline. Showing what was loaded last.", systemImage: "wifi.slash")
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
     }
 }

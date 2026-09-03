@@ -1,5 +1,4 @@
 import SwiftUI
-import BalmDesignSystem
 
 /// Keyboard-first filterable list for picker sheets, matching the app's
 /// Linear-style UX. An auto-focused search field filters rows by substring;
@@ -12,7 +11,6 @@ import BalmDesignSystem
 /// Backlog). `onActivate` decides what activation means: single-select pickers
 /// select-and-dismiss; multi-select pickers toggle membership and stay open.
 struct KeyboardFilterList<Item: Hashable, Row: View>: View {
-    @Environment(\.balmTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
     let items: [Item]
@@ -48,9 +46,9 @@ struct KeyboardFilterList<Item: Hashable, Row: View>: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: theme.spacing.s) {
+        HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(theme.palette.mutedForeground)
+                .foregroundStyle(.secondary)
             TextField(prompt, text: $query)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
@@ -59,21 +57,21 @@ struct KeyboardFilterList<Item: Hashable, Row: View>: View {
                 .onKeyPress(.return) { activateHighlighted() }
                 .onKeyPress(.escape) { dismiss(); return .handled }
         }
-        .padding(.horizontal, theme.spacing.m)
-        .padding(.vertical, theme.spacing.s)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder
     private var listBody: some View {
         if isLoading && items.isEmpty {
-            HStack(spacing: theme.spacing.s) {
+            HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Loading…").foregroundStyle(theme.palette.mutedForeground)
+                Text("Loading…").foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if filtered.isEmpty {
             Text(emptyText)
-                .foregroundStyle(theme.palette.mutedForeground)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
@@ -83,7 +81,7 @@ struct KeyboardFilterList<Item: Hashable, Row: View>: View {
                             row(item)
                         }
                         .buttonStyle(.plain)
-                        .listRowBackground(item == highlight ? theme.palette.secondary : Color.clear)
+                        .listRowBackground(item == highlight ? Color.accentColor.opacity(0.14) : Color.clear)
                         .id(item)
                     }
                 }

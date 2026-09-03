@@ -26,29 +26,37 @@ struct KeyboardSelectMenu: View {
     }
 }
 
-/// Label-less multi-select trigger for inline filter condition rows.
+/// Label-less multi-select trigger. Inline in filter condition rows, or as a
+/// bordered small control in the scope bar (`bordered: true`).
 struct KeyboardMultiSelect: View {
     let title: String
     let options: [MultiSelectOption]
     @Binding var selection: [String]
     /// First-letter hotkey that opens this selector while the parent view is up.
     var shortcut: KeyEquivalent? = nil
+    var shortcutModifiers: EventModifiers = []
+    /// Draw as a bordered small button rather than inline text.
+    var bordered = false
+    /// Shown when nothing is selected.
+    var emptyLabel = "Any"
+    /// Plural noun for the "N selected" summary, e.g. "sprints" → "2 sprints".
+    var summaryNoun: String? = nil
 
     @State private var isPresented = false
 
     var body: some View {
-        Button { isPresented = true } label: {
-            HStack(spacing: 4) {
-                Text(summary)
-                    .foregroundStyle(selection.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-                Image(systemName: "chevron.up.chevron.down")
-                    .imageScale(.small)
-                    .foregroundStyle(.tint)
+        Group {
+            if bordered {
+                trigger
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            } else {
+                trigger
+                    .buttonStyle(.plain)
             }
         }
-        .buttonStyle(.plain)
         .fixedSize()
-        .keyboardShortcutIfPresent(shortcut)
+        .keyboardShortcutIfPresent(shortcut, modifiers: shortcutModifiers)
         #if os(macOS)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             NativeMultiSelectPopover(title: title, options: options, selection: $selection)
@@ -62,12 +70,31 @@ struct KeyboardMultiSelect: View {
         #endif
     }
 
+    private var trigger: some View {
+        Button { isPresented = true } label: {
+            HStack(spacing: 4) {
+                Text(summary)
+                    .foregroundStyle(textStyle)
+                Image(systemName: "chevron.up.chevron.down")
+                    .imageScale(.small)
+                    .foregroundStyle(bordered ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+            }
+        }
+        .help(title)
+    }
+
+    private var textStyle: AnyShapeStyle {
+        if bordered { return AnyShapeStyle(.primary) }
+        return selection.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint)
+    }
+
     private var summary: String {
-        if selection.isEmpty { return "Any" }
+        if selection.isEmpty { return emptyLabel }
         if selection.count == 1,
            let match = options.first(where: { $0.id == selection[0] }) {
             return match.label
         }
+        if let summaryNoun { return "\(selection.count) \(summaryNoun)" }
         return "\(selection.count) selected"
     }
 }
@@ -170,9 +197,9 @@ private struct NativeMultiSelectSheet: View {
 
 private extension View {
     @ViewBuilder
-    func keyboardShortcutIfPresent(_ key: KeyEquivalent?) -> some View {
+    func keyboardShortcutIfPresent(_ key: KeyEquivalent?, modifiers: EventModifiers = []) -> some View {
         if let key {
-            keyboardShortcut(key, modifiers: [])
+            keyboardShortcut(key, modifiers: modifiers)
         } else {
             self
         }
