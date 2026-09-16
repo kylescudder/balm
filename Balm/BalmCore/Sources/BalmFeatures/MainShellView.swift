@@ -270,17 +270,55 @@ public struct MainShellView: View {
         inspectorPresented = false
     }
 
-    /// Invisible button owning the bare-`I` inbox shortcut. Single keys don't
-    /// fire while a text field (the search bar) has focus, which is the
-    /// behaviour we want.
+    /// Invisible buttons owning the bare-key shortcuts: `I` for the inbox, and
+    /// the issue keys, which reach the open issue by notification. Single keys
+    /// don't fire while a text field (the search bar, a comment) has focus,
+    /// which is the behaviour we want. They live here rather than in
+    /// `IssueDetailView` because a bare-key `keyboardShortcut` declared inside
+    /// `.inspector` shifts that column's hit-test geometry away from what it
+    /// draws, so every click in the inspector lands on the wrong control.
     private var inboxShortcutSink: some View {
-        Button("Inbox") {
-            sidebarSelection = .inbox
+        Group {
+            Button("Inbox") { sidebarSelection = .inbox }
+                .keyboardShortcut("i", modifiers: [])
+            if selectedIssue != nil {
+                issueShortcutSink
+            }
         }
-        .keyboardShortcut("i", modifiers: [])
         .opacity(0)
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
+    }
+
+    /// The issue keys, active whenever an issue is open.
+    @ViewBuilder
+    private var issueShortcutSink: some View {
+        Button("Status") { editIssueField("status") }
+            .keyboardShortcut("s", modifiers: [])
+        Button("Assignee") { editIssueField("assignee") }
+            .keyboardShortcut("a", modifiers: [])
+        Button("Priority") { editIssueField("priority") }
+            .keyboardShortcut("p", modifiers: [])
+        Button("Labels") { editIssueField("labels") }
+            .keyboardShortcut("l", modifiers: [])
+        Button("Due date") { editIssueField("dueDate") }
+            .keyboardShortcut("d", modifiers: [])
+        Button("Components") { editIssueField("components") }
+            .keyboardShortcut("m", modifiers: [])
+        Button("Fix version") { editIssueField("versions") }
+            .keyboardShortcut("v", modifiers: [])
+        Button("Edit description") { editIssueField("description") }
+            .keyboardShortcut("e", modifiers: [])
+        Button("Comment") { editIssueField("comment") }
+            .keyboardShortcut("c", modifiers: [])
+    }
+
+    private func editIssueField(_ field: String) {
+        NotificationCenter.default.post(
+            name: .balmEditIssueFieldRequested,
+            object: nil,
+            userInfo: ["field": field]
+        )
     }
     #endif
 
