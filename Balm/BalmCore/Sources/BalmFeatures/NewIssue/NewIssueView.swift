@@ -227,7 +227,7 @@ public struct NewIssueView: View {
     /// rather than the (empty) `/project/{key}/components` endpoint.
     private func loadComponentField() async {
         guard let typeID = issueType?.id else {
-            componentFieldID = nil; componentOptions = []
+            clearComponentField()
             return
         }
         do {
@@ -236,7 +236,7 @@ public struct NewIssueView: View {
             )
             guard let field = MetadataEndpoints.CreateMetaFields.componentField(from: resp.fields),
                   let fieldID = field.identifier else {
-                componentFieldID = nil; componentOptions = []; selectedComponents = []
+                clearComponentField()
                 return
             }
             componentFieldID = fieldID
@@ -253,6 +253,20 @@ public struct NewIssueView: View {
         } catch {
             env.toaster.report(error, "Couldn't load fields")
         }
+    }
+
+    /// Forget the resolved component field. Every derived flag has to go with
+    /// the id — issue types in one project disagree about whether a component
+    /// is required and whether it takes one value or many, so a leftover
+    /// `componentRequired` from the previous type would block Create on a type
+    /// that has no component field at all.
+    private func clearComponentField() {
+        componentFieldID = nil
+        componentFieldName = "Components"
+        componentRequired = false
+        componentMultiple = false
+        componentOptions = []
+        selectedComponents = []
     }
 
     private func submit() {
