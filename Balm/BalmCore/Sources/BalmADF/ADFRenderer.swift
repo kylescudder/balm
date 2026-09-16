@@ -103,6 +103,7 @@ public struct ADFRenderer: Sendable {
 
     private func renderMedia(_ node: ADFNode, context: Context) -> ADFBlock? {
         let alt = node.attrs?["alt"]?.stringValue ?? node.attrs?["title"]?.stringValue
+        let naturalWidth = node.attrs?["width"]?.doubleValue
 
         // Prefer matching to a known attachment by filename, media-services id,
         // or Jira's numeric attachment id. Comment ADF `media.attrs.id` uses the
@@ -110,12 +111,12 @@ public struct ADFRenderer: Sendable {
         if let altName = alt,
            let match = context.attachments.first(where: { $0.filename == altName }),
            let url = match.content {
-            return .image(url: url, alt: match.filename)
+            return .image(ADFImage(url: url, alt: match.filename, attachment: match, naturalWidth: naturalWidth))
         }
         if let idAttr = node.attrs?["id"]?.stringValue {
             if let match = context.attachments.first(where: { $0.mediaFileID == idAttr || $0.id == idAttr }) {
                 if let url = match.content {
-                    return .image(url: url, alt: match.filename)
+                    return .image(ADFImage(url: url, alt: match.filename, attachment: match, naturalWidth: naturalWidth))
                 }
                 return .attachmentRef(id: match.id, filename: match.filename)
             }
@@ -124,12 +125,14 @@ public struct ADFRenderer: Sendable {
         return .attachmentRef(id: "unknown", filename: alt)
     }
 
+    /// Legacy `image` nodes point at an arbitrary public URL, not a Jira
+    /// attachment, so they carry no `attachment` and load without credentials.
     private func renderImageNode(_ node: ADFNode) -> ADFBlock? {
         guard let src = node.attrs?["src"]?.stringValue, let url = URL(string: src) else {
             return nil
         }
         let alt = node.attrs?["alt"]?.stringValue ?? node.attrs?["title"]?.stringValue
-        return .image(url: url, alt: alt)
+        return .image(ADFImage(url: url, alt: alt, naturalWidth: node.attrs?["width"]?.doubleValue))
     }
 
     // MARK: - Inline runs

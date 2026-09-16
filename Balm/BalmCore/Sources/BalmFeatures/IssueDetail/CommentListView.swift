@@ -368,7 +368,7 @@ private struct CommentRow: View {
     @ViewBuilder
     private var bodyView: some View {
         if let adf = comment.bodyADF, let blocks = try? renderer.render(json: adf, attachments: attachments) {
-            ADFContentView(blocks: blocks, loadsImagesWithJiraAuth: true)
+            ADFContentView(blocks: blocks)
         } else if !comment.body.isEmpty {
             Text(comment.body)
                 .textSelection(.enabled)
