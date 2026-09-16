@@ -134,4 +134,72 @@ final class ADFRendererMediaTests: XCTestCase {
         XCTAssertEqual(image.alt, "A picture")
         XCTAssertNil(image.attachment, "Public URLs must not be routed through the Jira gateway")
     }
+
+    func testNonImageMediaAttachmentRendersAsReferenceNotImage() throws {
+        let body = Data("""
+        {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "mediaSingle",
+              "content": [
+                { "type": "media", "attrs": { "id": "media-uuid", "type": "file", "alt": "spec.pdf" } }
+              ]
+            }
+          ]
+        }
+        """.utf8)
+        let attachment = JiraAttachmentMeta(
+            id: "10003",
+            filename: "spec.pdf",
+            size: 9000,
+            mimeType: "application/pdf",
+            isImage: false,
+            content: try XCTUnwrap(URL(string: "https://jira.example.test/secure/attachment/3/spec.pdf")),
+            mediaFileID: "media-uuid"
+        )
+
+        let blocks = try ADFRenderer().render(json: body, attachments: [attachment])
+
+        guard case .attachmentRef(let id, let filename) = blocks.first else {
+            return XCTFail("A PDF must not render as an image, got \(String(describing: blocks.first))")
+        }
+        XCTAssertEqual(id, "10003")
+        XCTAssertEqual(filename, "spec.pdf")
+    }
+
+    func testImageAttachmentWithoutContentURLRendersAsReference() throws {
+        let body = Data("""
+        {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "mediaSingle",
+              "content": [
+                { "type": "media", "attrs": { "id": "media-uuid", "type": "file", "alt": "shot.png" } }
+              ]
+            }
+          ]
+        }
+        """.utf8)
+        let attachment = JiraAttachmentMeta(
+            id: "10004",
+            filename: "shot.png",
+            size: 12,
+            mimeType: "image/png",
+            isImage: true,
+            content: nil,
+            mediaFileID: "media-uuid"
+        )
+
+        let blocks = try ADFRenderer().render(json: body, attachments: [attachment])
+
+        guard case .attachmentRef(let id, let filename) = blocks.first else {
+            return XCTFail("An image with no download URL has nothing to fetch, got \(String(describing: blocks.first))")
+        }
+        XCTAssertEqual(id, "10004")
+        XCTAssertEqual(filename, "shot.png")
+    }
 }
