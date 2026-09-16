@@ -22,7 +22,7 @@ brew tap kylescudder/tap
 brew install --cask balm
 ```
 
-> **A note on signing:** Balm is currently signed ad-hoc (not notarised with an Apple Developer ID). The cask strips the Gatekeeper quarantine flag on install (via a `postflight` step) so the app launches normally. Once a Developer ID + notarisation pipeline is in place this won't be necessary.
+> **A note on signing:** Balm is currently signed ad-hoc (not notarised with an Apple Developer ID). The cask strips the Gatekeeper quarantine flag on install (via a `postflight_steps` step) so the app launches normally. Once a Developer ID + notarisation pipeline is in place this won't be necessary.
 
 To update:
 
