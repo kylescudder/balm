@@ -103,33 +103,48 @@ public struct ADFRenderer: Sendable {
 
     private func renderMedia(_ node: ADFNode, context: Context) -> ADFBlock? {
         let alt = node.attrs?["alt"]?.stringValue ?? node.attrs?["title"]?.stringValue
+        let naturalWidth = node.attrs?["width"]?.doubleValue
 
         // Prefer matching to a known attachment by filename, media-services id,
         // or Jira's numeric attachment id. Comment ADF `media.attrs.id` uses the
         // Media Services UUID, not the Jira attachment id.
         if let altName = alt,
-           let match = context.attachments.first(where: { $0.filename == altName }),
-           let url = match.content {
-            return .image(url: url, alt: match.filename)
+           let match = context.attachments.first(where: { $0.filename == altName }) {
+            return block(for: match, naturalWidth: naturalWidth)
         }
         if let idAttr = node.attrs?["id"]?.stringValue {
             if let match = context.attachments.first(where: { $0.mediaFileID == idAttr || $0.id == idAttr }) {
-                if let url = match.content {
-                    return .image(url: url, alt: match.filename)
-                }
-                return .attachmentRef(id: match.id, filename: match.filename)
+                return block(for: match, naturalWidth: naturalWidth)
             }
             return .attachmentRef(id: idAttr, filename: alt)
         }
         return .attachmentRef(id: "unknown", filename: alt)
     }
 
+    /// A `media` node can point at any attachment, not just an image: Jira
+    /// embeds PDFs and video the same way. Only an image the client can
+    /// actually decode becomes an `.image`; everything else stays a reference
+    /// so it never reaches the image viewer.
+    private func block(for attachment: JiraAttachmentMeta, naturalWidth: Double?) -> ADFBlock {
+        guard attachment.isImage, let url = attachment.content else {
+            return .attachmentRef(id: attachment.id, filename: attachment.filename)
+        }
+        return .image(ADFImage(
+            url: url,
+            alt: attachment.filename,
+            attachment: attachment,
+            naturalWidth: naturalWidth
+        ))
+    }
+
+    /// Legacy `image` nodes point at an arbitrary public URL, not a Jira
+    /// attachment, so they carry no `attachment` and load without credentials.
     private func renderImageNode(_ node: ADFNode) -> ADFBlock? {
         guard let src = node.attrs?["src"]?.stringValue, let url = URL(string: src) else {
             return nil
         }
         let alt = node.attrs?["alt"]?.stringValue ?? node.attrs?["title"]?.stringValue
-        return .image(url: url, alt: alt)
+        return .image(ADFImage(url: url, alt: alt, naturalWidth: node.attrs?["width"]?.doubleValue))
     }
 
     // MARK: - Inline runs

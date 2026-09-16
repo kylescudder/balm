@@ -1,16 +1,16 @@
 import SwiftUI
 import BalmADF
+import BalmModels
 import BalmDesignSystem
 
 struct ADFContentView: View {
     @Environment(\.balmTheme) private var theme
     let blocks: [ADFBlock]
-    var loadsImagesWithJiraAuth = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.spacing.m) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                ADFBlockView(block: block, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
+                ADFBlockView(block: block)
             }
         }
     }
@@ -19,7 +19,6 @@ struct ADFContentView: View {
 struct ADFBlockView: View {
     @Environment(\.balmTheme) private var theme
     let block: ADFBlock
-    var loadsImagesWithJiraAuth = false
 
     var body: some View {
         switch block {
@@ -64,33 +63,14 @@ struct ADFBlockView: View {
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: theme.spacing.xs) {
                     ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                        ADFBlockView(block: child, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
+                        ADFBlockView(block: child)
                     }
                 }
             }
             .padding(.leading, theme.spacing.xs)
 
-        case .image(let url, let alt):
-            Group {
-                if loadsImagesWithJiraAuth {
-                    JiraImageView(url: url, contentMode: .fit) { _ in
-                        placeholderImage(alt: alt ?? "image")
-                    }
-                } else {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFit()
-                        case .failure:
-                            placeholderImage(alt: alt ?? "image")
-                        default:
-                            ProgressView()
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+        case .image(let image):
+            ADFInlineImage(image: image)
 
         case .attachmentRef(_, let filename):
             HStack(spacing: theme.spacing.s) {
@@ -109,7 +89,7 @@ struct ADFBlockView: View {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
                             VStack(alignment: .leading, spacing: theme.spacing.xs) {
                                 ForEach(Array(cell.enumerated()), id: \.offset) { _, block in
-                                    ADFBlockView(block: block, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
+                                    ADFBlockView(block: block)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,21 +121,10 @@ struct ADFBlockView: View {
                 .frame(width: 18, alignment: .leading)
             VStack(alignment: .leading, spacing: theme.spacing.xs) {
                 ForEach(Array(item.enumerated()), id: \.offset) { _, block in
-                    ADFBlockView(block: block, loadsImagesWithJiraAuth: loadsImagesWithJiraAuth)
+                    ADFBlockView(block: block)
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private func placeholderImage(alt: String) -> some View {
-        HStack(spacing: theme.spacing.s) {
-            Image(systemName: "photo")
-            Text(alt)
-        }
-        .padding(theme.spacing.m)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .foregroundStyle(.secondary)
     }
 
     private func headingFont(for level: Int) -> Font {
@@ -165,5 +134,66 @@ struct ADFBlockView: View {
         case 3: return theme.typography.title3
         default: return theme.typography.headline
         }
+    }
+}
+
+/// One inline image inside a description or comment.
+///
+/// A Jira attachment is fetched through the authenticated API (a plain
+/// `AsyncImage` gets a 401 from the attachment endpoint) and opens in the
+/// full-size viewer on tap. A legacy `image` node with a public URL loads
+/// with `AsyncImage` and no credentials.
+private struct ADFInlineImage: View {
+    @Environment(\.balmTheme) private var theme
+    let image: ADFImage
+
+    @State private var viewingAttachment: JiraAttachmentMeta?
+
+    var body: some View {
+        Group {
+            if let attachment = image.attachment {
+                Button {
+                    viewingAttachment = attachment
+                } label: {
+                    JiraImageView(url: image.url, contentMode: .fit) { _ in
+                        placeholder
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("View \(attachment.filename)")
+                .sheet(item: $viewingAttachment) { attachment in
+                    ImageViewerSheet(attachment: attachment)
+                }
+            } else {
+                AsyncImage(url: image.url) { phase in
+                    switch phase {
+                    case .success(let loaded):
+                        loaded.resizable().scaledToFit()
+                    case .failure:
+                        placeholder
+                    default:
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: maxWidth, alignment: .leading)
+        .clipShape(RoundedRectangle(cornerRadius: theme.radii.md, style: .continuous))
+    }
+
+    /// Fill the column, but never stretch a small image past its own pixels.
+    private var maxWidth: CGFloat {
+        guard let width = image.naturalWidth, width > 0 else { return .infinity }
+        return CGFloat(width)
+    }
+
+    private var placeholder: some View {
+        HStack(spacing: theme.spacing.s) {
+            Image(systemName: "photo")
+            Text(image.alt ?? "image")
+        }
+        .padding(theme.spacing.m)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .foregroundStyle(.secondary)
     }
 }
