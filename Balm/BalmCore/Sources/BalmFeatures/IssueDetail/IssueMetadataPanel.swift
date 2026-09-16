@@ -1,6 +1,7 @@
 import SwiftUI
 import BalmModels
 import BalmAPI
+import BalmADF
 import BalmDesignSystem
 
 /// The issue's fields. Status, priority and assignee are the three people
@@ -15,6 +16,7 @@ struct IssueMetadataPanel: View {
     @Binding var editingField: EditableField?
 
     @State private var components: [JiraComponent] = []
+    private let renderer = ADFRenderer()
 
     var body: some View {
         let issue = model.issue ?? placeholderIssue
@@ -241,8 +243,25 @@ struct IssueMetadataPanel: View {
                 Task { await model.setLabels(labels) }
             }
         case .description:
-            EmptyView()
+            DescriptionEditorView(initial: plainDescription(of: issue)) { value in
+                Task { await model.setDescription(plainText: value) }
+            }
         }
+    }
+
+    /// The description as editable plain text. ADF keeps structure the editor
+    /// can't round-trip, so paragraphs and headings are all it offers back.
+    private func plainDescription(of issue: JiraIssue) -> String {
+        if let text = issue.descriptionText, !text.isEmpty { return text }
+        if let adf = issue.descriptionADF,
+           let blocks = try? renderer.render(json: adf) {
+            return blocks.compactMap { block -> String? in
+                if case .paragraph(let attr) = block { return String(attr.characters) }
+                if case .heading(_, let attr) = block { return String(attr.characters) }
+                return nil
+            }.joined(separator: "\n\n")
+        }
+        return ""
     }
 
     private func loadOptions(projectKey: String) async {

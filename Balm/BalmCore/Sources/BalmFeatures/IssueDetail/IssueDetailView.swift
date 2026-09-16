@@ -19,9 +19,9 @@ public struct IssueDetailView: View {
     @Environment(\.openURL) private var openURL
 
     @State private var model: IssueDetailViewModel
-    @State private var editingDescription = false
     /// Which field picker is open. Shared by the quick-property buttons, the
-    /// grid rows and the single-key shortcuts, so they all open the same sheet.
+    /// grid rows, the description editor and the single-key shortcuts, so they
+    /// all open the same sheet.
     @State private var editingField: EditableField?
     /// Bumped by the C shortcut; the comment composer takes focus.
     @State private var commentFocusRequest = 0
@@ -66,14 +66,16 @@ public struct IssueDetailView: View {
             #endif
         }
         .task(id: initialIssue.key) { await reconnectAndLoad() }
+        #if !os(macOS)
         .background { issueShortcutSink }
-        .sheet(isPresented: $editingDescription) {
-            DescriptionEditorView(
-                initial: descriptionPlainText,
-                onApply: { value in
-                    Task { await model.setDescription(plainText: value) }
-                }
-            )
+        #endif
+        .onReceive(NotificationCenter.default.publisher(for: .balmEditIssueFieldRequested)) { note in
+            guard let raw = note.userInfo?["field"] as? String else { return }
+            if raw == "comment" {
+                commentFocusRequest += 1
+            } else {
+                editingField = EditableField(rawValue: raw)
+            }
         }
     }
 
@@ -92,8 +94,14 @@ public struct IssueDetailView: View {
 
     private static let commentsAnchor = "comments"
 
+    /// A `List`, not a `ScrollView`. Inside `.inspector` a `ScrollView` insets
+    /// what it draws by the toolbar's height but leaves its layout and hit-test
+    /// geometry at the top of the column, so a click lands on whatever is drawn
+    /// a toolbar below it — clicking the status button opened the due date
+    /// picker. `List` moves both together. The content is a single row, so the
+    /// column keeps the one-stack layout it has always had.
     private var macScroll: some View {
-        ScrollView {
+        List {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 Text(currentIssue.summary)
@@ -117,11 +125,13 @@ public struct IssueDetailView: View {
                     .id(Self.commentsAnchor)
                 ChangelogView(entries: model.details.changelog)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 24, trailing: 20))
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         // Declared inside the inspector, so these land in the inspector's own
         // toolbar zone on macOS 26 rather than crowding the content's.
         .toolbar {
@@ -201,7 +211,7 @@ public struct IssueDetailView: View {
 
             Section("Description") {
                 descriptionContent
-                Button("Edit description") { editingDescription = true }
+                Button("Edit description") { editingField = .description }
             }
 
             AttachmentListView(model: model)
@@ -243,9 +253,13 @@ public struct IssueDetailView: View {
 
     // MARK: - Keyboard
 
-    /// Single keys act on the open issue. They are invisible buttons so they
-    /// never fire while a text field has focus, and they open exactly the
-    /// sheet the matching button opens.
+    #if !os(macOS)
+    /// Single keys act on the open issue when an iPad has a hardware keyboard.
+    /// They are invisible buttons so they never fire while a text field has
+    /// focus, and they open exactly the sheet the matching button opens. On
+    /// macOS these live in `MainShellView` instead: a bare-key
+    /// `keyboardShortcut` declared inside `.inspector` shifts that column's
+    /// hit-test geometry away from what it draws.
     private var issueShortcutSink: some View {
         Group {
             Button("Status") { editingField = .status }
@@ -262,7 +276,7 @@ public struct IssueDetailView: View {
                 .keyboardShortcut("m", modifiers: [])
             Button("Fix version") { editingField = .versions }
                 .keyboardShortcut("v", modifiers: [])
-            Button("Edit description") { editingDescription = true }
+            Button("Edit description") { editingField = .description }
                 .keyboardShortcut("e", modifiers: [])
             Button("Comment") { commentFocusRequest += 1 }
                 .keyboardShortcut("c", modifiers: [])
@@ -271,13 +285,14 @@ public struct IssueDetailView: View {
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
     }
+    #endif
 
     // MARK: - Description
 
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeading("Description") {
-                Button("Edit") { editingDescription = true }
+                Button("Edit") { editingField = .description }
                     .buttonStyle(.borderless)
                     .help("Edit description (E)")
             }
@@ -297,19 +312,6 @@ public struct IssueDetailView: View {
             Text(isLoaded ? "No description." : "Loading description")
                 .foregroundStyle(.secondary)
         }
-    }
-
-    private var descriptionPlainText: String {
-        if let text = currentIssue.descriptionText, !text.isEmpty { return text }
-        if let adf = currentIssue.descriptionADF,
-           let blocks = try? renderer.render(json: adf) {
-            return blocks.compactMap { block -> String? in
-                if case .paragraph(let attr) = block { return String(attr.characters) }
-                if case .heading(_, let attr) = block { return String(attr.characters) }
-                return nil
-            }.joined(separator: "\n\n")
-        }
-        return ""
     }
 
     // MARK: - Key badge

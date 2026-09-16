@@ -57,4 +57,10 @@ public extension Notification.Name {
     static let balmIssueUpdated = Notification.Name("app.balm.issueUpdated")
     /// Requests the shell present the Inbox sheet (⇧⌘I on macOS).
     static let balmGoToInboxRequested = Notification.Name("app.balm.goToInboxRequested")
+    /// A single-key issue shortcut fired in the shell. userInfo["field"] carries
+    /// the `EditableField` raw value, or "comment" to focus the composer. The
+    /// keys are owned by the shell rather than the inspector because a bare-key
+    /// `keyboardShortcut` declared inside `.inspector` shifts that column's
+    /// hit-test geometry away from what it draws.
+    static let balmEditIssueFieldRequested = Notification.Name("app.balm.editIssueFieldRequested")
 }
