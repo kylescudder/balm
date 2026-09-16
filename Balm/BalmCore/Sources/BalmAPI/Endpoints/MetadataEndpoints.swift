@@ -51,12 +51,21 @@ public enum MetadataEndpoints {
             /// custom single-select "Component", `type == "option"`).
             public var isMultiValue: Bool { schema?.type == "array" }
 
-            /// True when the field holds selectable option(s) rather than free
-            /// text, a user or a date. Guards the loose name match below, so a
-            /// text field like "Component notes" can't be mistaken for the
-            /// component picker.
+            /// True when the field holds selectable option(s) this form can
+            /// actually render — a single select, or a list *of options*.
+            ///
+            /// An array alone is not enough: a multi-user field like "Component
+            /// owners" is `array` too, and its allowed values carry
+            /// `accountId`/`displayName`, which `AllowedValue` cannot decode. It
+            /// would resolve to an empty picker and, when required, leave Create
+            /// disabled with no way to satisfy it. So arrays must hold
+            /// `option` or `component` items.
             public var isOptionShaped: Bool {
-                schema?.type == "option" || schema?.type == "array"
+                switch schema?.type {
+                case "option": return true
+                case "array": return schema?.items == "option" || schema?.items == "component"
+                default: return false
+                }
             }
 
             public struct Schema: Decodable, Sendable {
@@ -64,6 +73,9 @@ public enum MetadataEndpoints {
                 public let system: String?
                 public let custom: String?
                 public let customId: Int?
+                /// Element type for `type == "array"` — e.g. `component`,
+                /// `option`, `string`, `user`, `version`.
+                public let items: String?
             }
         }
         public struct AllowedValue: Decodable, Sendable {
@@ -122,7 +134,12 @@ public enum MetadataEndpoints {
             if id == "components" { return 0 }
             guard id.hasPrefix("customfield_") else { return nil }
             let name = (field.name ?? "").lowercased()
-            if name == "component" || name == "components" { return 1 }
+            // An exact name is unambiguous, and some tenants return it with no
+            // schema at all — but when there is one, it still has to be a field
+            // this form can render.
+            if name == "component" || name == "components" {
+                return field.schema == nil || field.isOptionShaped ? 1 : nil
+            }
             guard name.contains("component"), field.isOptionShaped else { return nil }
             return field.required == true ? 2 : 3
         }

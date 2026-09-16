@@ -186,7 +186,7 @@ final class CreateMetaFieldsTests: XCTestCase {
         let fields = try decodeFields(#"""
         {"fields":[
           {"fieldId":"customfield_11906","key":"customfield_11906","name":"Affected Components",
-           "required":true,"schema":{"type":"array"},
+           "required":true,"schema":{"type":"array","items":"option"},
            "allowedValues":[{"value":"Bifrost","id":"14647"}]}
         ]}
         """#)
@@ -256,6 +256,109 @@ final class CreateMetaFieldsTests: XCTestCase {
         XCTAssertEqual(
             MetadataEndpoints.CreateMetaFields.componentField(from: try decodeFields(json))?.identifier,
             MetadataEndpoints.CreateMetaFields.componentField(from: try decodeFields(reversed))?.identifier
+        )
+    }
+
+    // MARK: - Array candidates are restricted by item type
+
+    /// A multi-user field is `array` too, but its allowed values carry
+    /// accountId/displayName, which AllowedValue cannot decode — it would
+    /// resolve to an empty picker and, being required, leave Create permanently
+    /// disabled with no way to satisfy it.
+    func testIgnoresAMultiUserFieldNamedLikeAComponent() throws {
+        let fields = try decodeFields(#"""
+        {"fields":[
+          {"fieldId":"customfield_30003","key":"customfield_30003","name":"Component owners",
+           "required":true,"schema":{"type":"array","items":"user"},
+           "allowedValues":[{"accountId":"abc","displayName":"Kyle Scudder"}]}
+        ]}
+        """#)
+
+        XCTAssertNil(MetadataEndpoints.CreateMetaFields.componentField(from: fields))
+    }
+
+    func testIgnoresAStringArrayNamedLikeAComponent() throws {
+        let fields = try decodeFields(#"""
+        {"fields":[
+          {"fieldId":"customfield_30004","key":"customfield_30004","name":"Component tags",
+           "required":true,"schema":{"type":"array","items":"string"}}
+        ]}
+        """#)
+
+        XCTAssertNil(MetadataEndpoints.CreateMetaFields.componentField(from: fields))
+    }
+
+    func testAcceptsAComponentItemArray() throws {
+        let fields = try decodeFields(#"""
+        {"fields":[
+          {"fieldId":"customfield_30005","key":"customfield_30005","name":"Internal Components",
+           "required":true,"schema":{"type":"array","items":"component"},
+           "allowedValues":[{"name":"Bifrost","id":"14647"}]}
+        ]}
+        """#)
+
+        let field = MetadataEndpoints.CreateMetaFields.componentField(from: fields)
+        XCTAssertEqual(field?.identifier, "customfield_30005")
+        XCTAssertTrue(field?.isMultiValue ?? false)
+    }
+
+    /// An exact name is unambiguous, but a schema that is present still has to
+    /// describe a field this form can render.
+    func testIgnoresAnExactlyNamedFieldOfAnUnrenderableShape() throws {
+        let fields = try decodeFields(#"""
+        {"fields":[
+          {"fieldId":"customfield_30006","key":"customfield_30006","name":"Component",
+           "required":true,"schema":{"type":"user"}}
+        ]}
+        """#)
+
+        XCTAssertNil(MetadataEndpoints.CreateMetaFields.componentField(from: fields))
+    }
+
+    // MARK: - Project-wide resolution across issue types
+
+    /// `resolveCreateMetaFields` unions the field lists of the project's first
+    /// few issue types and resolves once over the whole set. Ranking has to
+    /// survive that union: if an earlier type contributes only the qualified
+    /// field, the project-wide filter must still bind to the plain one a later
+    /// type contributes, whatever order `/issuetype/project` returned.
+    func testRanksAcrossAUnionOfIssueTypeFieldLists() throws {
+        let unioned = try decodeFields(#"""
+        {"fields":[
+          {"fieldId":"customfield_11906","key":"customfield_11906","name":"Internal Component",
+           "required":true,"schema":{"type":"option"},
+           "allowedValues":[{"value":"Bifrost","id":"14647"}]},
+          {"fieldId":"summary","key":"summary","name":"Summary","schema":{"type":"string"}},
+          {"fieldId":"customfield_10312","key":"customfield_10312","name":"Component",
+           "required":true,"schema":{"type":"option"},
+           "allowedValues":[{"value":"Odyssey Web Client","id":"10468"}]},
+          {"fieldId":"customfield_11906","key":"customfield_11906","name":"Internal Component",
+           "required":true,"schema":{"type":"option"},
+           "allowedValues":[{"value":"Odyssey","id":"14648"}]}
+        ]}
+        """#)
+
+        let resolved = MetadataEndpoints.CreateMetaFields.resolveComponentField(from: unioned)
+        XCTAssertEqual(resolved?.jqlField, "cf[10312]")
+        XCTAssertEqual(resolved?.values, ["Odyssey Web Client"])
+    }
+
+    /// The same field repeated across types must not change the outcome.
+    func testDuplicateFieldEntriesResolveToOneField() throws {
+        let unioned = try decodeFields(#"""
+        {"fields":[
+          {"fieldId":"customfield_11906","key":"customfield_11906","name":"Internal Component",
+           "required":false,"schema":{"type":"option"},
+           "allowedValues":[{"value":"Bifrost","id":"14647"}]},
+          {"fieldId":"customfield_11906","key":"customfield_11906","name":"Internal Component",
+           "required":true,"schema":{"type":"option"},
+           "allowedValues":[{"value":"Bifrost","id":"14647"}]}
+        ]}
+        """#)
+
+        XCTAssertEqual(
+            MetadataEndpoints.CreateMetaFields.resolveComponentField(from: unioned)?.jqlField,
+            "cf[11906]"
         )
     }
 }

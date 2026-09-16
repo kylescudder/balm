@@ -436,7 +436,7 @@ public final class IssueListViewModel {
         guard let types = try? await api.send(MetadataEndpoints.ProjectIssueTypes(projectID: project.id)) else {
             return (nil, nil)
         }
-        var component: (jqlField: String, values: [String])?
+        var componentCandidates: [MetadataEndpoints.CreateMetaFields.FieldMeta] = []
         var instanceFieldID: String?
         var instanceNames = Set<String>()
         for type in types.prefix(5) {
@@ -445,14 +445,18 @@ public final class IssueListViewModel {
                     MetadataEndpoints.CreateMetaFields(projectIdOrKey: project.key, issueTypeId: id)
                   )
             else { continue }
-            if component == nil {
-                component = MetadataEndpoints.CreateMetaFields.resolveComponentField(from: meta.fields)
-            }
+            componentCandidates.append(contentsOf: meta.fields)
             if let instance = MetadataEndpoints.CreateMetaFields.resolveInstanceField(from: meta.fields) {
                 instanceFieldID = instance.fieldId
                 instanceNames.formUnion(instance.values)
             }
         }
+        // Rank across every type rather than taking the first type that matches.
+        // Issue types disagree about which field holds components — MP5 uses
+        // "Component" on Task but "Internal Component" on Internal Improvement —
+        // and `/issuetype/project` gives no ordering guarantee, so first-match
+        // could pin the project-wide filter to a type-specific field.
+        let component = MetadataEndpoints.CreateMetaFields.resolveComponentField(from: componentCandidates)
         let instance = instanceFieldID.map {
             (fieldId: $0, values: instanceNames.sorted { $0.localizedCompare($1) == .orderedAscending })
         }
