@@ -42,10 +42,11 @@ Build command:       bun run build
 Publish directory:   Site/dist
 Functions directory: leave blank
 ```
+
 ## URLs for the Atlassian developer console
 
-| Field | URL |
-|---|---|
-| Privacy policy | https://balm.kylescudder.co.uk/privacy |
-| Terms of service | https://balm.kylescudder.co.uk/terms |
+| Field                    | URL                                    |
+| ------------------------ | -------------------------------------- |
+| Privacy policy           | https://balm.kylescudder.co.uk/privacy |
+| Terms of service         | https://balm.kylescudder.co.uk/terms   |
 | Customer support contact | https://balm.kylescudder.co.uk/support |
