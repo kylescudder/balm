@@ -2,14 +2,14 @@
    Warm paper + eucalyptus sage; system-native type, keycaps as the motif. */
 
 :root {
-  --background: #FAF6EE;
-  --foreground: #2C332E;
-  --card: #F2ECE0;
-  --muted-foreground: #6E756D;
-  --primary: #5E7A66;
-  --accent: #6E8A76;
-  --border: #E2DACB;
-  --clay: #B5705F;
+  --background: #faf6ee;
+  --foreground: #2c332e;
+  --card: #f2ece0;
+  --muted-foreground: #6e756d;
+  --primary: #5e7a66;
+  --accent: #6e8a76;
+  --border: #e2dacb;
+  --clay: #b5705f;
 
   --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -18,27 +18,35 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #191B1A;
-    --foreground: #ECEAE0;
+    --background: #191b1a;
+    --foreground: #eceae0;
     --card: #222423;
-    --muted-foreground: #969C96;
-    --primary: #8AA890;
-    --accent: #8AA890;
+    --muted-foreground: #969c96;
+    --primary: #8aa890;
+    --accent: #8aa890;
     --border: #313431;
-    --clay: #CC8A78;
+    --clay: #cc8a78;
   }
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 img {
   display: block;
   max-width: 100%;
 }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+}
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  * { transition: none !important; }
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    transition: none !important;
+  }
 }
 
 body {
@@ -56,7 +64,9 @@ a {
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
-a:hover { color: var(--accent); }
+a:hover {
+  color: var(--accent);
+}
 a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
@@ -285,7 +295,10 @@ kbd {
   overflow-x: auto;
   white-space: nowrap;
 }
-.install .prompt { color: var(--muted-foreground); user-select: none; }
+.install .prompt {
+  color: var(--muted-foreground);
+  user-select: none;
+}
 .shortcut-list {
   display: grid;
   gap: 0.55rem;
@@ -321,7 +334,9 @@ kbd {
 }
 
 /* Legal / prose pages */
-.prose { padding: 2.5rem 0 4rem; }
+.prose {
+  padding: 2.5rem 0 4rem;
+}
 .prose .eyebrow {
   margin: 0 0 0.5rem;
   color: var(--primary);
@@ -348,8 +363,12 @@ kbd {
   font-weight: 600;
   margin: 2.25rem 0 0.5rem;
 }
-.prose ul { padding-left: 1.25rem; }
-.prose li { margin-bottom: 0.4rem; }
+.prose ul {
+  padding-left: 1.25rem;
+}
+.prose li {
+  margin-bottom: 0.4rem;
+}
 .prose .summary {
   background: var(--card);
   border: 1px solid var(--border);
@@ -410,7 +429,9 @@ footer .wrap {
   gap: 0.5rem 1.5rem;
   justify-content: center;
 }
-footer a { color: var(--muted-foreground); }
+footer a {
+  color: var(--muted-foreground);
+}
 
 @media (max-width: 52rem) {
   .top-nav {

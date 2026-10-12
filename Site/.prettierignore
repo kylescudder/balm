@@ -1,0 +1,5 @@
+Caddyfile
+Dockerfile
+node_modules/
+.astro/
+dist/

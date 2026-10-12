@@ -10,17 +10,17 @@ The existing tagged macOS Release and iOS/TestFlight workflows are independent.
 ## Host and public URLs
 
 - Checkout: `/Users/kyle/platform/apps/balm-auth` on `herman.local` / `herman-1`.
-- Auth: `https://balm-auth.kylescudder.co.uk`, upstream `balm-auth:3000`.
-- Hook: `https://balm-deploy.kylescudder.co.uk/hooks/balm-auth`.
+- Auth: `https://auth.getbalm.app`, upstream `balm-auth:3000`.
+- Hook: `https://deploy-auth.getbalm.app/hooks/balm-auth`.
 - LaunchAgent: `com.herman.balm-auth-deploy`, running as Kyle, the Colima owner.
 - Runtime: Bun 1.3.13 pinned by digest; no database or persistent application volume.
 
-The old nested auth hostname is not switched by this deployment. Existing app
-binaries retain their compiled BFF URL and need an updated build to use the new
-hostname. Custom `Config/Secrets.xcconfig` or `IOS_SECRETS_XCCONFIG` overrides
-must also use the new URL. OAuth client ID, secret and `balm://auth/callback`
-remain the same. Full sign-in and existing-token refresh require real device
-acceptance; health and synthetic tests do not establish that acceptance.
+Native builds use `https://auth.getbalm.app`. Previously installed binaries keep
+their compiled BFF URL and need an updated build for the new domain. Custom
+`Config/Secrets.xcconfig` and `IOS_SECRETS_XCCONFIG` overrides must also use this
+URL. The OAuth application and `balm://auth/callback` remain unchanged. Real
+device sign-in and refresh acceptance are distinct from deployment checks.
+The marketing pipeline is documented in [site/README.md](site/README.md).
 
 ## Trust boundaries
 
@@ -28,9 +28,9 @@ The receiver has no Docker socket, shell credentials, database network or host
 ports. It has a read-only filesystem and can write only its request queue.
 HMAC-SHA256 signatures, a five-minute timestamp window, bounded request sizes
 and a bounded queue protect the exact webhook route. Cloudflare Access must
-protect the whole `balm-deploy.kylescudder.co.uk` hostname with a Service Auth
+protect the whole `deploy-auth.getbalm.app` hostname with a Service Auth
 policy allowing only `github-balm-auth-deploy`. Enable the Service Auth 401
-response. Never protect the native app's `balm-auth.kylescudder.co.uk` endpoint
+response. Never protect the native app's `auth.getbalm.app` endpoint
 with this policy: the native client cannot send deployment credentials.
 
 Before requesting a deployment, the workflow verifies that unauthenticated
@@ -58,7 +58,7 @@ its expiry during provisioning. Store them directly in GitHub's production
 environment, never in repository files or chat. Repository variables:
 
 - `DEPLOY_ENABLED=true` enables deployment after publication.
-- `AUTH_BASE_URL=https://balm-auth.kylescudder.co.uk` selects public verification.
+- `AUTH_BASE_URL=https://auth.getbalm.app` selects public verification.
 
 On Herman, `.env` holds the immutable `BALM_AUTH_IMAGE`, `ATLASSIAN_CLIENT_ID`,
 `ATLASSIAN_CLIENT_SECRET` and optional `PLATFORM_WEB_NETWORK`.
@@ -100,7 +100,7 @@ In Cloudflare One, create a service token named `github-balm-auth-deploy` with
 a one-year duration. Copy its Client ID and Client Secret into the two Access
 secrets in GitHub's `production` environment (the secret is shown only once).
 Create a Self-hosted Access application named `Balm deploy`, public hostname
-`balm-deploy.kylescudder.co.uk`, with no path restriction. Add one policy named
+`deploy-auth.getbalm.app`, with no path restriction. Add one policy named
 `GitHub Balm deploy`, action `Service Auth`, Include selector `Service Token`,
 value `github-balm-auth-deploy`. Do not add Allow Everyone or Bypass policies.
 Enable the application's 401 response for Service Auth policies.
@@ -111,3 +111,7 @@ Access-aware workflow, re-enable requests, and run Deploy auth on main to
 verify the complete path. Do not mark Access accepted until that deployment's
 protection checks and public revision check pass. Rotate/renew the Access token
 before expiry, updating both GitHub secrets together.
+
+New native builds use `https://auth.getbalm.app`. TestFlight explicitly applies
+that URL after loading private build configuration, so a stale config secret
+cannot retain the previous hostname. Installed binaries need an update.

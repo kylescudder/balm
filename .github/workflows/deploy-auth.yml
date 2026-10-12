@@ -130,7 +130,7 @@ jobs:
       group: production
       cancel-in-progress: false
     env:
-      DEPLOY_URL: https://balm-deploy.kylescudder.co.uk/hooks/balm-auth
+      DEPLOY_URL: https://deploy-auth.getbalm.app/hooks/balm-auth
       HEALTH_URL: ${{ vars.AUTH_BASE_URL }}/health
     steps:
       - name: Check deploy endpoint protection
@@ -148,7 +148,7 @@ jobs:
           for path in / /healthz /other; do
             status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
               -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
-              "https://balm-deploy.kylescudder.co.uk$path")
+              "https://deploy-auth.getbalm.app$path")
             [[ "$status" = 404 ]] || { echo "::error::Non-webhook path returned $status."; exit 1; }
           done
           status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
