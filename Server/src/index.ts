@@ -36,7 +36,16 @@ const app = new Hono()
 
 app.use('*', cors())
 
-app.get('/health', (c) => c.json({ ok: true }))
+app.use('*', async (c, next) => {
+  c.header('Cache-Control', 'no-store')
+  await next()
+})
+
+app.get('/health', (c) => {
+  c.header('X-Balm-Auth-Revision', process.env.BALM_AUTH_REVISION ?? 'development')
+  const ready = Boolean(process.env.ATLASSIAN_CLIENT_ID && process.env.ATLASSIAN_CLIENT_SECRET)
+  return c.json({ ok: ready }, ready ? 200 : 503)
+})
 
 /**
  * Native client token exchange. Atlassian's /oauth/token requires client_secret
@@ -164,6 +173,7 @@ const port = Number(process.env.PORT ?? 3000)
 console.log(`Balm BFF listening on http://localhost:${port}`)
 
 export default {
+  hostname: '0.0.0.0',
   port,
   fetch: app.fetch
 }

@@ -1,0 +1,168 @@
+# Publishes a checked, attested image for every commit on main. GitHub holds
+# only a webhook credential, never Atlassian or shell access.
+name: Deploy auth
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-auth-release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/kylescudder/balm-auth
+
+jobs:
+  ci:
+    uses: ./.github/workflows/auth-ci.yml
+
+  build:
+    needs: ci
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: Server
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: BALM_AUTH_REVISION=${{ github.sha }}
+          provenance: false
+          sbom: false
+      - name: Record digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir -p digests
+          echo "$DIGEST" > "digests/${PLATFORM//\//-}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ strategy.job-index }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      digest: ${{ steps.manifest.outputs.digest }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: manifest
+        name: Create multi-platform manifest
+        run: |
+          sources=()
+          for file in digests/*; do sources+=("$IMAGE@$(cat "$file")"); done
+          docker buildx imagetools create -t "$IMAGE:sha-$GITHUB_SHA" "${sources[@]}"
+          digest=$(docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Published \`$IMAGE@$digest\`" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+      # Move the main tag only after the attestation exists.
+      - name: Tag main
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: docker buildx imagetools create -t "$IMAGE:main" "$IMAGE@$DIGEST"
+
+  # Asks Herman to deploy the attested digest, then waits for the public site to
+  # report this commit. Herman verifies the attestation itself, so the webhook
+  # secret can only ever trigger a release that this workflow built from main.
+  deploy:
+    needs: publish
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    environment:
+      name: production
+      url: ${{ vars.AUTH_BASE_URL }}
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      DEPLOY_URL: https://balm-deploy.kylescudder.co.uk/hooks/balm-auth
+      HEALTH_URL: ${{ vars.AUTH_BASE_URL }}/health
+    steps:
+      - name: Check deploy endpoint protection
+        run: |
+          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' -X POST "$DEPLOY_URL")
+          [[ "$status" = 401 ]] || { echo "::error::Unsigned request returned $status."; exit 1; }
+          for path in / /healthz /other; do
+            status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' "https://balm-deploy.kylescudder.co.uk$path")
+            [[ "$status" = 404 ]] || { echo "::error::Non-webhook path returned $status."; exit 1; }
+          done
+      - name: Request deploy
+        env:
+          DIGEST: ${{ needs.publish.outputs.digest }}
+          WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+        run: |
+          body=$(jq -cn --arg digest "$DIGEST" --arg revision "$GITHUB_SHA" --argjson timestamp "$(date +%s)" \
+            '{digest: $digest, revision: $revision, timestamp: $timestamp}')
+          signature=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" -hex | awk '{print $NF}')
+          curl --fail-with-body --silent --show-error --max-time 30 "$DEPLOY_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Balm-Auth-Signature: sha256=$signature" \
+            --data "$body"
+      - name: Wait for production to run this commit
+        run: |
+          for attempt in $(seq 60); do
+            revision=$(curl --fail --silent --max-time 10 --dump-header - --output /dev/null "$HEALTH_URL" \
+              | tr -d '\r' | awk -F': ' 'tolower($1) == "x-balm-auth-revision" {print $2}' || true)
+            if [ "$revision" = "$GITHUB_SHA" ]; then
+              echo "Production is running $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Production did not report $GITHUB_SHA within 10 minutes (last: ${revision:-none}). Check state/deploy.log on Herman."
+          exit 1

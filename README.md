@@ -75,3 +75,9 @@ Tagged releases (`vX.Y.Z`) are built by CI (`.github/workflows/release.yml`) and
 ## License
 
 Copyright © 2026 Kyle Scudder. All rights reserved.
+
+### Automatic auth deployment
+
+Every push to `main` tests and publishes the auth backend, then deploys its
+verified image to Herman and checks the live revision. The native app releases
+remain separate. See [Herman deployment and rollback](deploy/README.md).
