@@ -21,3 +21,12 @@ jobs:
         run: python3 -B -m unittest discover -s deploy/site -p 'test_*.py'
       - name: Webhook authentication and queue tests
         run: node --test deploy/site/receiver/server.test.mjs
+      - name: Verify the production container starts without privileges
+        run: |
+          docker build -t balm-site:ci --build-arg BALM_SITE_REVISION="$GITHUB_SHA" Site
+          BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml config --quiet
+          docker network create platform-web
+          trap 'BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml down; docker network rm platform-web' EXIT
+          BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml up -d --wait --wait-timeout 60
+          docker exec balm-site-balm-site-1 wget -qO- http://127.0.0.1:8080/healthz
+          docker exec balm-site-balm-site-1 wget -qO- http://127.0.0.1:8080/privacy/ | grep -q auth.getbalm.app
