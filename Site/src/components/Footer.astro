@@ -3,11 +3,18 @@ const year = new Date().getFullYear();
 ---
 
 <footer>
-  <div class="wrap">
-    <a href="/privacy">Privacy</a>
-    <a href="/terms">Terms</a>
-    <a href="/support">Support</a>
-    <a href="https://github.com/kylescudder/balm">GitHub</a>
-    <span>&copy; {year} Kyle Scudder</span>
+  <div class="footer-inner">
+    <a class="footer-brand" href="/">
+      <img src="/assets/balm-droplet.svg" alt="" width="30" height="30" />
+      <span>Balm<b>.</b></span>
+    </a>
+    <p>Jira, with room to think.</p>
+    <nav aria-label="Footer navigation">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/kylescudder/balm">GitHub ↗</a>
+    </nav>
+    <span class="copyright">&copy; {year} Kyle Scudder</span>
   </div>
 </footer>

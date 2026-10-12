@@ -1,17 +1,388 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import HomeFeed from "../components/HomeFeed.astro";
-import HomeSidebar from "../components/HomeSidebar.astro";
+
+const issues = [
+  {
+    state: "progress",
+    key: "BAL-128",
+    title: "Polish the first-run project picker",
+    priority: "↑",
+    label: "onboarding",
+    avatar: "KS",
+    selected: true,
+  },
+  {
+    state: "waiting",
+    key: "BAL-121",
+    title: "Review notification read-state sync",
+    priority: "→",
+    label: "inbox",
+    avatar: "AM",
+  },
+  {
+    state: "blocked",
+    key: "BAL-119",
+    title: "Confirm App Store metadata",
+    priority: "↑",
+    label: "release",
+    avatar: "JL",
+  },
+  {
+    state: "done",
+    key: "BAL-114",
+    title: "Ship saved project views",
+    priority: "↓",
+    label: "filters",
+    avatar: "KS",
+  },
+];
+
+const statuses = [
+  { state: "todo", label: "To do", detail: "Not started" },
+  { state: "blocked", label: "Blocked", detail: "Needs attention" },
+  { state: "progress", label: "In progress", detail: "Moving" },
+  { state: "waiting", label: "Waiting", detail: "With someone else" },
+  { state: "done", label: "Done", detail: "Complete" },
+  { state: "closed", label: "Closed", detail: "Not doing" },
+];
+
+const shortcuts = [
+  ["N", "New issue"],
+  ["F", "Filter"],
+  ["⇧S", "Sprint scope"],
+  ["⌘K", "Search"],
+  ["1 / 2", "List / board"],
+  ["E", "Edit description"],
+  ["S", "Change status"],
+  ["C", "Comment"],
+];
 ---
 
 <BaseLayout
-  title="Balm - a native, keyboard-driven Jira client"
-  description="Balm is a native, keyboard-driven Jira Cloud client for macOS and iOS. Calm, fast, and one key away."
+  title="Balm — Jira, with room to think"
+  description="Balm is a calm, native Jira Cloud client for Mac, iPad and iPhone. Projects, saved views, issue detail and a keyboard-first workflow in one focused place."
+  bodyClass="home-page"
 >
-  <main class="app-page">
-    <section class="product-layout">
-      <HomeFeed />
-      <HomeSidebar />
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span></span> Native Jira for Apple platforms</p>
+        <h1 id="hero-title">Jira, with room <em>to think.</em></h1>
+        <p class="hero-lede">
+          Balm brings projects, saved views, issues and full detail into one
+          quiet workspace—so you can move work without losing your place.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#download">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M13.1 3.2c-.8.1-1.7.6-2.2 1.2-.5.6-.9 1.5-.8 2.3.9.1 1.8-.4 2.3-1 .5-.7.9-1.6.7-2.5ZM16.2 12.9c-.3.8-.7 1.5-1.2 2.2-.7 1-1.5 2.2-2.7 2.2-1 0-1.3-.6-2.5-.6s-1.5.6-2.5.6c-1.2 0-2-1.1-2.7-2.1-1.9-2.7-2.1-5.9-.9-7.7A4 4 0 0 1 7 5.6c1 0 1.8.6 2.5.6.7 0 1.7-.7 2.9-.6.5 0 2 .2 3 1.6a3.4 3.4 0 0 0 .8 5.7Z"></path>
+            </svg>
+            Get Balm
+          </a>
+          <a class="text-link" href="#workbench">See the workbench <span>↓</span></a>
+        </div>
+        <p class="requirements">macOS 15+ · iOS &amp; iPadOS 18+ · Jira Cloud</p>
+      </div>
+
+      <div class="app-stage" aria-label="Balm’s three-pane Mac workspace" role="img">
+        <div class="app-halo halo-sage"></div>
+        <div class="app-halo halo-clay"></div>
+        <div class="app-window">
+          <div class="window-bar">
+            <div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="window-title">Balm</div>
+            <div class="window-tools"><span>⌕</span><span>＋</span></div>
+          </div>
+          <div class="app-grid">
+            <aside class="app-sidebar">
+              <div class="sidebar-place"><span class="line-icon">▱</span>Inbox <b>3</b></div>
+              <div class="sidebar-place"><span class="line-icon">♙</span>My issues</div>
+              <p>Projects</p>
+              <div class="sidebar-place active"><span class="project-dot sage">B</span>Balm</div>
+              <div class="sidebar-place"><span class="project-dot ochre">W</span>Website</div>
+              <div class="sidebar-place"><span class="project-dot clay">M</span>Mobile</div>
+              <p>Views</p>
+              <div class="sidebar-place"><span class="line-icon">≡</span>Ready to ship</div>
+              <div class="sidebar-place"><span class="line-icon">≡</span>Needs me</div>
+              <div class="account-row"><span class="avatar sage-avatar">KS</span><span>Kyle</span><b>⚙</b></div>
+            </aside>
+
+            <div class="issue-column">
+              <div class="issue-toolbar">
+                <strong>Balm</strong>
+                <div class="view-toggle"><span class="active">≡</span><span>▥</span></div>
+                <span class="add-button">＋</span>
+              </div>
+              <div class="scope-row">
+                <span>Current sprint⌄</span><span>Filter</span><span class="scope-chip">Assignee is me ×</span><small>18 issues</small>
+              </div>
+              <div class="issue-list">
+                <div class="issue-section"><span class="status-glyph progress"></span>In progress <b>4</b></div>
+                {
+                  issues.slice(0, 2).map((issue) => (
+                    <div class:list={["issue-row", { selected: issue.selected }]}>
+                      <span class:list={["status-glyph", issue.state]}></span>
+                      <span class="issue-key">{issue.key}</span>
+                      <span class="priority">{issue.priority}</span>
+                      <strong>{issue.title}</strong>
+                      <span class="label-tag">{issue.label}</span>
+                      <span class="avatar">{issue.avatar}</span>
+                    </div>
+                  ))
+                }
+                <div class="issue-section"><span class="status-glyph blocked"></span>Needs attention <b>2</b></div>
+                {
+                  issues.slice(2, 3).map((issue) => (
+                    <div class="issue-row">
+                      <span class:list={["status-glyph", issue.state]}></span>
+                      <span class="issue-key">{issue.key}</span>
+                      <span class="priority">{issue.priority}</span>
+                      <strong>{issue.title}</strong>
+                      <span class="label-tag">{issue.label}</span>
+                      <span class="avatar">{issue.avatar}</span>
+                    </div>
+                  ))
+                }
+                <div class="issue-section"><span class="status-glyph done"></span>Done <b>12</b></div>
+                {
+                  issues.slice(3).map((issue) => (
+                    <div class="issue-row">
+                      <span class:list={["status-glyph", issue.state]}></span>
+                      <span class="issue-key">{issue.key}</span>
+                      <span class="priority">{issue.priority}</span>
+                      <strong>{issue.title}</strong>
+                      <span class="label-tag">{issue.label}</span>
+                      <span class="avatar">{issue.avatar}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+
+            <aside class="issue-inspector">
+              <div class="inspector-actions"><span>•••</span><span>×</span></div>
+              <p class="issue-key">BAL-128</p>
+              <h2>Polish the first-run project picker</h2>
+              <div class="status-button"><span class="status-glyph progress"></span>In progress <span>⌄</span></div>
+              <dl>
+                <div><dt>Assignee</dt><dd><span class="avatar sage-avatar">KS</span>Kyle Scudder</dd></div>
+                <div><dt>Priority</dt><dd><span class="priority">↑</span>High</dd></div>
+                <div><dt>Sprint</dt><dd>Launch polish</dd></div>
+                <div><dt>Labels</dt><dd><span class="label-tag">onboarding</span></dd></div>
+              </dl>
+              <div class="description-block">
+                <h3>Description</h3>
+                <p>Make choosing a first project feel clear, quick and unmistakably native.</p>
+                <ul><li>Remember the active project</li><li>Keep search focused</li></ul>
+              </div>
+              <div class="comment-box">Write a comment… <kbd>C</kbd></div>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-proof" aria-label="Product principles">
+        <div><span>01</span><strong>Native by default</strong><p>SwiftUI, platform controls and the shortcuts you expect.</p></div>
+        <div><span>02</span><strong>Private by design</strong><p>No analytics, trackers or hosted copy of your Jira data.</p></div>
+        <div><span>03</span><strong>Focused on flow</strong><p>Move from overview to action without browser archaeology.</p></div>
+      </div>
+    </section>
+
+    <section class="workbench-section" id="workbench" aria-labelledby="workbench-title">
+      <div class="section-heading">
+        <p class="section-number">01 / The workbench</p>
+        <h2 id="workbench-title">One window.<br /><em>Three kinds of focus.</em></h2>
+        <p>
+          Choose a place, scan the work, open the detail. The sidebar, list and
+          inspector stay together, so context never disappears behind a modal.
+        </p>
+      </div>
+
+      <div class="pane-story">
+        <div class="pane-card pane-places">
+          <span class="pane-number">1</span>
+          <div class="pane-mini-list">
+            <span class="active">▱ &nbsp; Inbox <b>3</b></span>
+            <span>♙ &nbsp; My issues</span>
+            <small>PROJECTS</small>
+            <span><i class="project-dot sage">B</i>Balm</span>
+            <small>VIEWS</small>
+            <span>≡ &nbsp; Ready to ship</span>
+          </div>
+          <h3>Places, not tabs.</h3>
+          <p>Projects and saved filters live in one familiar sidebar.</p>
+        </div>
+        <div class="pane-card pane-work">
+          <span class="pane-number">2</span>
+          <div class="pane-mini-list issues">
+            <small>IN PROGRESS <b>4</b></small>
+            <span><i class="status-glyph progress"></i><b>BAL-128</b> Polish first run</span>
+            <span><i class="status-glyph waiting"></i><b>BAL-121</b> Review sync</span>
+            <small>NEEDS ATTENTION <b>2</b></small>
+            <span><i class="status-glyph blocked"></i><b>BAL-119</b> Store metadata</span>
+          </div>
+          <h3>Work, shaped clearly.</h3>
+          <p>Switch between a dense list and a board without changing scope.</p>
+        </div>
+        <div class="pane-card pane-detail">
+          <span class="pane-number">3</span>
+          <div class="pane-mini-detail">
+            <small>BAL-128</small>
+            <strong>Polish the first-run project picker</strong>
+            <span><i class="status-glyph progress"></i> In progress</span>
+            <p>Description</p>
+          </div>
+          <h3>Detail that stays put.</h3>
+          <p>Read, edit and comment in an inspector while your list stays visible.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="status-section" aria-labelledby="status-title">
+      <div class="status-copy">
+        <p class="section-number">02 / Signal, not decoration</p>
+        <h2 id="status-title">Status is a shape.</h2>
+        <p>
+          Colour shows the health of the work. Fill shows its progress. A ring,
+          mark or check makes every state legible at a glance—even without colour.
+        </p>
+      </div>
+      <div class="status-spectrum">
+        {
+          statuses.map((status, index) => (
+            <div class="status-item">
+              <span class="status-track-index">0{index + 1}</span>
+              <span class:list={["status-glyph", "status-glyph-large", status.state]}></span>
+              <div><strong>{status.label}</strong><small>{status.detail}</small></div>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="feature-grid" id="workflow" aria-labelledby="workflow-title">
+      <div class="feature-intro">
+        <p class="section-number">03 / Built for the work between</p>
+        <h2 id="workflow-title">Less Jira wrangling.<br /><em>More forward motion.</em></h2>
+      </div>
+
+      <article class="feature-card filter-card">
+        <div class="feature-copy">
+          <span class="feature-index">A</span>
+          <h3>Turn filters into places.</h3>
+          <p>
+            Combine sprint, status, assignee, release and more. Save the result
+            as a view and it’s waiting in the sidebar next time.
+          </p>
+        </div>
+        <div class="filter-demo" aria-hidden="true">
+          <div class="filter-title"><span>Filter issues</span><b>Done</b></div>
+          <div class="filter-rule"><span>Status</span><span>is any of</span><strong><i class="status-glyph progress"></i> In progress</strong></div>
+          <div class="filter-rule"><span>Assignee</span><span>is</span><strong><i class="avatar sage-avatar">KS</i> Me</strong></div>
+          <div class="filter-rule"><span>Due date</span><span>before</span><strong>12 Sep</strong></div>
+          <div class="save-view"><span>Save as a view</span><kbd>↵</kbd></div>
+        </div>
+      </article>
+
+      <article class="feature-card search-card">
+        <div class="search-demo" aria-hidden="true">
+          <div class="search-field"><span>⌕</span><strong>offline banner</strong><kbd>↵</kbd></div>
+          <div class="search-result">
+            <i class="status-glyph waiting"></i>
+            <div><small>IOS-84</small><strong>Add clearer offline state</strong></div>
+          </div>
+          <div class="visibility-note"><span>↳</span><p><strong>Hidden by sprint</strong>This issue is outside “Current sprint”.</p><button>Show all sprints</button></div>
+        </div>
+        <div class="feature-copy">
+          <span class="feature-index">B</span>
+          <h3>Search beyond the view.</h3>
+          <p>
+            Search every project from where you are. If a result was hidden by
+            project, sprint or filter, Balm tells you why—and offers the one fix.
+          </p>
+        </div>
+      </article>
+
+      <article class="feature-card inbox-card">
+        <div class="feature-copy">
+          <span class="feature-index">C</span>
+          <h3>An inbox, kept quiet.</h3>
+          <p>
+            Catch up on activity from issues you own, report or watch. Balm polls
+            Jira on-device, keeps read state in sync and never hosts your issues.
+          </p>
+        </div>
+        <div class="inbox-demo" aria-hidden="true">
+          <div class="inbox-tabs"><strong>Inbox</strong><span><b>All</b><i>Unread</i></span></div>
+          <div class="notification unread"><i></i><span class="avatar ochre-avatar">AM</span><p><strong>Ari moved BAL-121</strong><small>Waiting for review · 4m</small></p></div>
+          <div class="notification"><i></i><span class="avatar clay-avatar">JL</span><p><strong>Jo commented on BAL-119</strong><small>“The metadata is ready…” · 18m</small></p></div>
+          <div class="notification"><i></i><span class="avatar sage-avatar">KS</span><p><strong>BAL-114 was completed</strong><small>Ready to ship · 1h</small></p></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="keyboard-section" aria-labelledby="keyboard-title">
+      <div class="keyboard-copy">
+        <p class="section-number">04 / Keyboard vocabulary</p>
+        <h2 id="keyboard-title">The mouse is welcome.<br /><em>Optional, though.</em></h2>
+        <p>
+          One set of keys follows you through the app. Open any issue and S, A,
+          P, L, D, M, V, E and C put the field you want under your fingers.
+        </p>
+      </div>
+      <div class="shortcut-board">
+        {
+          shortcuts.map(([key, label]) => (
+            <div class="shortcut-key"><kbd>{key}</kbd><span>{label}</span></div>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="platform-section" aria-labelledby="platform-title">
+      <div class="section-heading compact-heading">
+        <p class="section-number">05 / Made for the platform</p>
+        <h2 id="platform-title">The same calm shape,<br /><em>at every size.</em></h2>
+        <p>
+          A three-pane workbench on Mac. A flexible sidebar on iPad. Focused tabs
+          and split detail on iPhone. Each one feels at home because it is.
+        </p>
+      </div>
+      <div class="device-lineup" aria-hidden="true">
+        <div class="device device-mac">
+          <div class="device-screen"><i></i><b></b><span></span></div><em>Mac</em>
+        </div>
+        <div class="device device-ipad">
+          <div class="device-screen"><i></i><b></b><span></span></div><em>iPad</em>
+        </div>
+        <div class="device device-phone">
+          <div class="device-screen"><i></i><b></b><span></span></div><em>iPhone</em>
+        </div>
+      </div>
+    </section>
+
+    <section class="download-section" id="download" aria-labelledby="download-title">
+      <div class="download-mark"><img src="/assets/balm-droplet.svg" alt="" width="96" height="96" /></div>
+      <p class="section-number">Independent. Native. Yours.</p>
+      <h2 id="download-title">Make Jira feel<br /><em>at home.</em></h2>
+      <p class="download-copy">
+        Balm connects directly to your Jira Cloud account with Atlassian OAuth.
+        No analytics. No tracking. No hosted copy of your work.
+      </p>
+      <div class="download-options">
+        <div class="download-option mac-download">
+          <small>Install on Mac with Homebrew</small>
+          <code><span>$</span> brew tap kylescudder/tap<br /><span>$</span> brew install --cask balm</code>
+        </div>
+        <div class="download-divider"><span>or</span></div>
+        <div class="download-option ios-download">
+          <small>Get Balm for iPhone and iPad</small>
+          <a href="https://apps.apple.com/search?term=Balm%20Jira" aria-label="Download Balm on the App Store">
+            <img src="/assets/download-on-app-store.svg" alt="Download on the App Store" width="162" height="48" />
+          </a>
+        </div>
+      </div>
+      <p class="independent-note">Balm is an independent app and is not affiliated with Atlassian.</p>
     </section>
   </main>
 </BaseLayout>
