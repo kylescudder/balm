@@ -1,5 +1,5 @@
 # Publishes a checked, attested image for every commit on main. GitHub holds
-# only a webhook credential, never Atlassian or shell access.
+# only webhook/Access credentials, never Atlassian or shell access.
 name: Deploy auth
 
 on:
@@ -134,17 +134,35 @@ jobs:
       HEALTH_URL: ${{ vars.AUTH_BASE_URL }}/health
     steps:
       - name: Check deploy endpoint protection
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' -X POST "$DEPLOY_URL")
-          [[ "$status" = 401 ]] || { echo "::error::Unsigned request returned $status."; exit 1; }
+          [[ -n "$CF_ACCESS_CLIENT_ID" && -n "$CF_ACCESS_CLIENT_SECRET" ]] || { echo '::error::Configure the production Cloudflare Access service-token secrets.'; exit 1; }
+          headers=$(mktemp)
+          trap 'rm -f "$headers"' EXIT
+          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
+            --dump-header "$headers" -X POST "$DEPLOY_URL")
+          [[ "$status" = 401 || "$status" = 403 ]] || { echo "::error::Cloudflare Access did not block an unauthenticated request ($status)."; exit 1; }
+          ! grep -qi '^x-balm-auth-deploy-hook: 1' "$headers" || { echo '::error::Unauthenticated request reached the receiver.'; exit 1; }
           for path in / /healthz /other; do
-            status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' "https://balm-deploy.kylescudder.co.uk$path")
+            status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
+              -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+              "https://balm-deploy.kylescudder.co.uk$path")
             [[ "$status" = 404 ]] || { echo "::error::Non-webhook path returned $status."; exit 1; }
           done
+          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
+            --dump-header "$headers" \
+            -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+            -H 'X-Balm-Auth-Signature: sha256=invalid' --data '{}' "$DEPLOY_URL")
+          [[ "$status" = 401 ]] || { echo "::error::Invalid webhook signature returned $status."; exit 1; }
+          grep -qi '^x-balm-auth-deploy-hook: 1' "$headers" || { echo '::error::Service token did not reach the receiver.'; exit 1; }
       - name: Request deploy
         env:
           DIGEST: ${{ needs.publish.outputs.digest }}
           WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           body=$(jq -cn --arg digest "$DIGEST" --arg revision "$GITHUB_SHA" --argjson timestamp "$(date +%s)" \
             '{digest: $digest, revision: $revision, timestamp: $timestamp}')
@@ -152,6 +170,8 @@ jobs:
           curl --fail-with-body --silent --show-error --max-time 30 "$DEPLOY_URL" \
             -H "Content-Type: application/json" \
             -H "X-Balm-Auth-Signature: sha256=$signature" \
+            -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+            -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
             --data "$body"
       - name: Wait for production to run this commit
         run: |
