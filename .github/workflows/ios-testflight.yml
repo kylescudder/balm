@@ -6,6 +6,11 @@ name: iOS · TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      access_check_only:
+        description: Check Apple API access without building or uploading
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -23,7 +28,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  apple-access:
+    name: Check Apple app access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify API credentials can access Balm
+        env:
+          APP_STORE_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: node Scripts/ci/check-app-store-access.mjs
+
   build:
+    needs: apple-access
+    if: ${{ !inputs.access_check_only }}
     name: Archive & upload
     runs-on: macos-26
     timeout-minutes: 45
