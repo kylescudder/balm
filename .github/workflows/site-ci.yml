@@ -1,0 +1,32 @@
+name: Marketing CI
+on:
+  pull_request:
+    branches: [main]
+    paths: ["Site/**", "deploy/site/**", "compose.site.yaml", ".github/workflows/site-ci.yml", ".github/workflows/deploy-site.yml"]
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build and check formatting
+        run: |
+          docker run --rm -v "$PWD/Site:/app" -w /app oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 sh -c 'bun install --frozen-lockfile && bun run build && bun run format:check'
+      - name: Deployment verification and rollback tests
+        run: python3 -B -m unittest discover -s deploy/site -p 'test_*.py'
+      - name: Webhook authentication and queue tests
+        run: node --test deploy/site/receiver/server.test.mjs
+      - name: Verify the production container starts without privileges
+        run: |
+          docker build -t balm-site:ci --build-arg BALM_SITE_REVISION="$GITHUB_SHA" Site
+          BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml config --quiet
+          docker network create platform-web
+          trap 'BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml down; docker network rm platform-web' EXIT
+          BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml up -d --wait --wait-timeout 60
+          docker exec balm-site-balm-site-1 wget -qO- http://127.0.0.1:8080/healthz
+          docker exec balm-site-balm-site-1 wget -qO- http://127.0.0.1:8080/privacy/ | grep -q auth.getbalm.app

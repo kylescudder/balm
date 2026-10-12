@@ -79,5 +79,5 @@ Copyright © 2026 Kyle Scudder. All rights reserved.
 ### Automatic auth deployment
 
 Every push to `main` tests and publishes the auth backend, then deploys its
-verified image to Herman and checks the live revision. The native app releases
-remain separate. See [Herman deployment and rollback](deploy/README.md).
+verified image to Herman and checks the live revision. The marketing site also deploys on main through its own Access-protected pipeline
+(see [marketing deployment](deploy/site/README.md)). Native app releases remain separate. See [Herman deployment and rollback](deploy/README.md).

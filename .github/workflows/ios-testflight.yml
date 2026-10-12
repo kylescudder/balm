@@ -62,6 +62,9 @@ jobs:
           else
             cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
           fi
+          # Keep the production endpoint current even when the private config
+          # still contains an older hostname. The last xcconfig assignment wins.
+          printf '\nBALM_BFF_BASE_URL = https:/$()/auth.getbalm.app\n' >> Config/Secrets.xcconfig
 
       - name: Write App Store Connect API key
         env:

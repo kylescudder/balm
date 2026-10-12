@@ -1,6 +1,6 @@
 # Balm site
 
-Static site for balm.kylescudder.co.uk — landing page plus the privacy,
+Static site for getbalm.app — landing page plus the privacy,
 terms, and support pages Atlassian's app distribution form requires.
 Built with Astro. The generated site is static and ships no client-side
 JavaScript.
@@ -29,23 +29,17 @@ bun run build
 
 The deployable files are written to `dist/`.
 
-## Netlify
+## Hosting
 
-The `Site/` directory owns the Astro package. The repository root only
-delegates commands into it, so Netlify should still use the root package and
-the checked-in `netlify.toml`:
+Every push to main builds an attested image and deploys to Herman through an
+Access-protected webhook. See [marketing deployment](../deploy/site/README.md).
+The public site is `https://getbalm.app`. Netlify builds are disabled; its old
+published copy is retained only for rollback.
 
-```text
-Base directory:      leave blank
-Package directory:   leave blank
-Build command:       bun run build
-Publish directory:   Site/dist
-Functions directory: leave blank
-```
 ## URLs for the Atlassian developer console
 
-| Field | URL |
-|---|---|
-| Privacy policy | https://balm.kylescudder.co.uk/privacy |
-| Terms of service | https://balm.kylescudder.co.uk/terms |
-| Customer support contact | https://balm.kylescudder.co.uk/support |
+| Field                    | URL                         |
+| ------------------------ | --------------------------- |
+| Privacy policy           | https://getbalm.app/privacy |
+| Terms of service         | https://getbalm.app/terms   |
+| Customer support contact | https://getbalm.app/support |

@@ -10,26 +10,35 @@ The existing tagged macOS Release and iOS/TestFlight workflows are independent.
 ## Host and public URLs
 
 - Checkout: `/Users/kyle/platform/apps/balm-auth` on `herman.local` / `herman-1`.
-- Auth: `https://balm-auth.kylescudder.co.uk`, upstream `balm-auth:3000`.
-- Hook: `https://balm-deploy.kylescudder.co.uk/hooks/balm-auth`.
+- Auth: `https://auth.getbalm.app`, upstream `balm-auth:3000`.
+- Hook: `https://deploy-auth.getbalm.app/hooks/balm-auth`.
 - LaunchAgent: `com.herman.balm-auth-deploy`, running as Kyle, the Colima owner.
 - Runtime: Bun 1.3.13 pinned by digest; no database or persistent application volume.
 
-The old nested auth hostname is not switched by this deployment. Existing app
-binaries retain their compiled BFF URL and need an updated build to use the new
-hostname. Custom `Config/Secrets.xcconfig` or `IOS_SECRETS_XCCONFIG` overrides
-must also use the new URL. OAuth client ID, secret and `balm://auth/callback`
-remain the same. Full sign-in and existing-token refresh require real device
-acceptance; health and synthetic tests do not establish that acceptance.
+Native builds use `https://auth.getbalm.app`. Previously installed binaries keep
+their compiled BFF URL and need an updated build for the new domain. Custom
+`Config/Secrets.xcconfig` and `IOS_SECRETS_XCCONFIG` overrides must also use this
+URL. The OAuth application and `balm://auth/callback` remain unchanged. Real
+device sign-in and refresh acceptance are distinct from deployment checks.
+The marketing pipeline is documented in [site/README.md](site/README.md).
 
 ## Trust boundaries
 
 The receiver has no Docker socket, shell credentials, database network or host
 ports. It has a read-only filesystem and can write only its request queue.
 HMAC-SHA256 signatures, a five-minute timestamp window, bounded request sizes
-and a bounded queue protect the exact webhook route. Unlike Spooktober, this
-separate hostname currently has no Cloudflare Access layer. Do not describe it
-as Access-protected. Unrelated paths return 404, unsigned hook requests 401.
+and a bounded queue protect the exact webhook route. Cloudflare Access must
+protect the whole `deploy-auth.getbalm.app` hostname with a Service Auth
+policy allowing only `github-balm-auth-deploy`. Enable the Service Auth 401
+response. Never protect the native app's `auth.getbalm.app` endpoint
+with this policy: the native client cannot send deployment credentials.
+
+Before requesting a deployment, the workflow verifies that unauthenticated
+requests are denied before reaching the receiver, authenticated unrelated
+paths return 404, and a valid Access token with an invalid HMAC reaches the
+receiver but is rejected with 401. It then sends both credentials with the
+signed deployment request. A receiver marker distinguishes its own 401 from
+Cloudflare's denial. These checks fail closed when Access or secrets are absent.
 
 The host independently verifies GitHub provenance for `kylescudder/balm`,
 `.github/workflows/deploy-auth.yml`, `refs/heads/main`, and GitHub-hosted runners.
@@ -42,10 +51,14 @@ runs with the newest push). Manual rollback accepts only an attested main digest
 ## Configuration
 
 GitHub's `production` environment permits branch `main` only and has no required
-reviewer. Its only secret is `DEPLOY_WEBHOOK_SECRET`. Repository variables:
+reviewer. Its secrets are `DEPLOY_WEBHOOK_SECRET`, `CF_ACCESS_CLIENT_ID` and
+`CF_ACCESS_CLIENT_SECRET`. The Access values belong to the dedicated
+`github-balm-auth-deploy` service token; set its duration to one year and record
+its expiry during provisioning. Store them directly in GitHub's production
+environment, never in repository files or chat. Repository variables:
 
 - `DEPLOY_ENABLED=true` enables deployment after publication.
-- `AUTH_BASE_URL=https://balm-auth.kylescudder.co.uk` selects public verification.
+- `AUTH_BASE_URL=https://auth.getbalm.app` selects public verification.
 
 On Herman, `.env` holds the immutable `BALM_AUTH_IMAGE`, `ATLASSIAN_CLIENT_ID`,
 `ATLASSIAN_CLIENT_SECRET` and optional `PLATFORM_WEB_NETWORK`.
@@ -80,3 +93,25 @@ boundary. Keep changes to these files separate from routine BFF releases.
 No self-hosted GitHub runner is installed. Kyle's login session and Colima must
 be running; FileVault requires unlock after a host reboot. Use the platform
 runbook and Herman skills for health, backups, hostnames and recovery.
+
+## Provision Cloudflare Access
+
+In Cloudflare One, create a service token named `github-balm-auth-deploy` with
+a one-year duration. Copy its Client ID and Client Secret into the two Access
+secrets in GitHub's `production` environment (the secret is shown only once).
+Create a Self-hosted Access application named `Balm deploy`, public hostname
+`deploy-auth.getbalm.app`, with no path restriction. Add one policy named
+`GitHub Balm deploy`, action `Service Auth`, Include selector `Service Token`,
+value `github-balm-auth-deploy`. Do not add Allow Everyone or Bypass policies.
+Enable the application's 401 response for Service Auth policies.
+
+During installation, keep `DEPLOY_ENABLED=false` until the policy and secrets
+exist and unauthenticated requests no longer reach the receiver. Merge the
+Access-aware workflow, re-enable requests, and run Deploy auth on main to
+verify the complete path. Do not mark Access accepted until that deployment's
+protection checks and public revision check pass. Rotate/renew the Access token
+before expiry, updating both GitHub secrets together.
+
+New native builds use `https://auth.getbalm.app`. TestFlight explicitly applies
+that URL after loading private build configuration, so a stale config secret
+cannot retain the previous hostname. Installed binaries need an update.
