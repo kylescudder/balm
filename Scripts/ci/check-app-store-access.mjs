@@ -26,6 +26,17 @@ export async function checkAccess(env = process.env, request = fetch) {
   } catch {
     throw new Error('App Store Connect API request failed or timed out.');
   }
+  if (!response.ok) {
+    // Apple's error code/title explains account-level blocks such as agreements.
+    // Only emit these bounded fields; never dump the response or request headers.
+    try {
+      const failure = await response.json();
+      for (const item of (failure.errors ?? []).slice(0, 3)) {
+        const safe = value => String(value ?? '').replace(/[\r\n\x00-\x1f]/g, ' ').slice(0, 400);
+        console.error(`Apple API error: ${safe(item.code)} | ${safe(item.title)} | ${safe(item.detail)}`);
+      }
+    } catch { /* The HTTP status below remains sufficient if there is no JSON. */ }
+  }
   if (response.status === 401) throw new Error('Apple rejected API authentication (HTTP 401). Verify the Key ID, Issuer ID and matching .p8 private key together.');
   if (response.status === 403) throw new Error('Apple denied access to Balm (HTTP 403). Check the API key team, permissions and account agreements.');
   if (response.status === 404) throw new Error('Balm app 6792147141 is not visible to this API credential (HTTP 404). Check the Apple team.');
