@@ -55,3 +55,11 @@ jira-clone-ref/
 
 ## Release artifacts
 dist/
+
+# Herman deployment state and private configuration
+.env.deploy-hook
+secrets/
+state/
+deploy-spool/
+backups/
+__pycache__/

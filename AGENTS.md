@@ -56,7 +56,7 @@ There is no Swift linter or formatter configured. Do not invent additional valid
 
 - Native build configuration lives in `Config/Secrets.xcconfig` (git-ignored and copied from `Config/Secrets.xcconfig.example`). `project.yml` attaches it to Debug and Release, and `Balm/Info.plist` exposes `ATLASSIAN_CLIENT_ID` and `BALM_BFF_BASE_URL` to `AppEnvironment`. An xcconfig URL must escape `//` as `/$()/`, for example `https:/$()/example.com`, because unescaped `//` begins a comment.
 - The Atlassian client ID and BFF URL are embedded in the app and are not confidential. The Atlassian client secret is confidential and belongs only in `Server/.env.local` or the deployed BFF environment. Never add the client secret to the xcconfig, plist, Swift source, site, tests, or logs.
-- The BFF loads `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, and optional `PORT` from its environment. It exists because Atlassian's token exchange and refresh require the client secret even when the native client uses PKCE.
+- The BFF loads `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, optional `PORT`, and build-time `BALM_AUTH_REVISION` from its environment. It exists because Atlassian's token exchange and refresh require the client secret even when the native client uses PKCE.
 - TestFlight signing material and App Store Connect credentials are GitHub Actions secrets. `IOS_SECRETS_XCCONFIG` can supply the production native config; pull-request builds use the committed example.
 
 ## Architecture
@@ -108,7 +108,7 @@ There is no Swift linter or formatter configured. Do not invent additional valid
 
 ### BFF and marketing site
 
-- `Server/` is a Bun/Hono service with only native token exchange, token refresh, and health endpoints. It must keep the Atlassian client secret server-side. CORS is currently broad; treat any expansion beyond token brokering as a security-sensitive server change.
+- `Server/` is a Bun/Hono service with only native token exchange, token refresh, and health endpoints. Every push to `main` runs `.github/workflows/deploy-auth.yml`; see `deploy/README.md` for the Herman image deployment and rollback contract. Its committed `Server/bun.lock` must be kept current. It must keep the Atlassian client secret server-side. CORS is currently broad; treat any expansion beyond token brokering as a security-sensitive server change.
 - `Site/` is a static Astro site. `BaseLayout` owns global structure, document metadata, header, and footer; privacy, terms, and support are product behavior contracts and must track changes to authentication, data handling, analytics, notifications, and support contact behavior.
 - Netlify builds with base `Site`, command `bun run build`, and publish directory `Site/dist`. Its ignore rule skips deploys when neither the site nor `netlify.toml` changed.
 - Runtime artwork belongs with its consumer: native assets in `Balm/Assets.xcassets`, web assets in `Site/public/assets`. There is no separate top-level branding source directory.
