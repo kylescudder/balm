@@ -46,6 +46,8 @@ jobs:
           else
             cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
           fi
+          # Override legacy URLs in the saved config, matching TestFlight builds.
+          printf '\nBALM_BFF_BASE_URL = https:/$()/auth.getbalm.app\n' >> Config/Secrets.xcconfig
 
       - name: Generate project
         run: xcodegen generate
@@ -65,6 +67,11 @@ jobs:
             MARKETING_VERSION="${{ steps.ver.outputs.version }}" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             build
+
+      - name: Verify packaged auth endpoint
+        run: |
+          PLIST="build/dd/Build/Products/Release/Balm.app/Contents/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :BALM_BFF_BASE_URL' "$PLIST")" = "https://auth.getbalm.app"
 
       - name: Package
         id: pkg
