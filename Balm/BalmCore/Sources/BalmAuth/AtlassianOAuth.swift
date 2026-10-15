@@ -87,7 +87,14 @@ public final class AtlassianOAuth: NSObject, Sendable {
                     callbackURLScheme: scheme,
                     completionHandler: completion(contextProvider)
                 )
+                #if os(macOS)
+                // Avoid Safari's shared-session consent handoff, which can stall
+                // before a browser window opens. A private session still uses
+                // the system callback, PKCE, and state validation below.
+                session.prefersEphemeralWebBrowserSession = true
+                #else
                 session.prefersEphemeralWebBrowserSession = false
+                #endif
                 session.presentationContextProvider = contextProvider
                 if !session.start() {
                     continuation.resume(throwing: AuthError.invalidCallbackURL)
