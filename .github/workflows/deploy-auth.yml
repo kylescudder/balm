@@ -7,7 +7,7 @@ name: Deploy auth
 on:
   push:
     branches: [main]
-    paths: ["Server/**", "deploy/**", "compose.yaml", ".github/workflows/auth-ci.yml", ".github/workflows/deploy-auth.yml"]
+    paths: ["Server/**", "deploy/**", "!deploy/site/**", "compose.yaml", ".github/workflows/auth-ci.yml", ".github/workflows/deploy-auth.yml"]
   workflow_dispatch:
 
 permissions:
