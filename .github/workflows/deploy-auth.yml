@@ -1,10 +1,13 @@
-# Publishes a checked, attested image for every commit on main. GitHub holds
-# only webhook/Access credentials, never Atlassian or shell access.
+# Publishes a checked, attested image for every commit on main that touches
+# this service (same paths as its PR CI; workflow_dispatch redeploys on
+# demand). GitHub holds only webhook/Access credentials, never Atlassian or
+# shell access.
 name: Deploy auth
 
 on:
   push:
     branches: [main]
+    paths: ["Server/**", "deploy/**", "!deploy/site/**", "compose.yaml", ".github/workflows/auth-ci.yml", ".github/workflows/deploy-auth.yml"]
   workflow_dispatch:
 
 permissions:
