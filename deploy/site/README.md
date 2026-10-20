@@ -23,7 +23,7 @@ The auth workflow is independent and both run on main changes.
 
 ## Deployer
 
-`application hooks` holds this app's settings and hooks; the
+Application-specific behavior is in `hooks.py`; deployment definitions are central.
 
 ## Configuration and security
 
@@ -51,7 +51,7 @@ contains absolute queue/secret paths and UID/GID 501:20.
 private directories 0700, and excluded from Git. No auth backend credential is
 copied into the marketing checkout or image.
 
-`com.kylescudder.deploy-core` is an event-driven launchd agent, running as
+`com.kylescudder.deploy-core` is the shared launchd supervisor, running as
 Kyle (the Colima owner). It verifies image provenance for this repository's
 `deploy-site.yml`, main and hosted runners before applying a digest. Failed
 health checks restore the previous image; each success pins the digest in `.env`
