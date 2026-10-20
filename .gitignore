@@ -56,7 +56,7 @@ jira-clone-ref/
 ## Release artifacts
 dist/
 
-# Herman deployment state and private configuration
+# Host deployment state and private configuration
 .env.deploy-hook
 secrets/
 state/

@@ -31,7 +31,7 @@ The deployable files are written to `dist/`.
 
 ## Hosting
 
-Every push to main builds an attested image and deploys to Herman through an
+Every push to main builds an attested image and deploys to the host through an
 Access-protected webhook. See [marketing deployment](../deploy/site/README.md).
 The public site is `https://getbalm.app`. Netlify builds are disabled; its old
 published copy is retained only for rollback.
