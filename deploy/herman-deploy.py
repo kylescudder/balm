@@ -129,11 +129,14 @@ def deploy(digest, requested_revision=None):
         raise Error('Use an exact sha256 digest.')
     private_env(APP / '.env')
     candidate = f'{IMAGE}@{digest}'
-    ids = compose('ps', '-a', '-q', 'balm-auth').decode().strip().splitlines()
+    # compose.yaml requires the image variable, which .env lacks before the first release.
+    ids = compose('ps', '-a', '-q', 'balm-auth', image=candidate).decode().strip().splitlines()
     if len(ids) > 1:
         raise Error('Expected a single Balm-Auth container.')
     current = json.loads(run(['docker', 'inspect', '--format', '{{json .}}', ids[0]])) if ids else None
-    running = current['Config']['Image'] if current else None
+    # A stopped container, such as a failed first candidate, is neither the previous
+    # release to roll back to nor an already-healthy deployment.
+    running = current['Config']['Image'] if current and current['State'].get('Running') else None
     if running == candidate and current['State'].get('Health', {}).get('Status') == 'healthy':
         revision = (current['Config'].get('Labels') or {}).get('org.opencontainers.image.revision', '')
         if not REVISION.fullmatch(revision) or requested_revision and requested_revision != revision:
