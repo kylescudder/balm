@@ -1,18 +1,22 @@
-# Balm auth on Herman
+# Balm auth on the host
 
 Every push to `main` runs **Deploy auth**, including changes outside `Server/`.
 CI tests and typechecks the BFF, tests the webhook and deployer, builds native
 AMD64/ARM64 images, publishes `ghcr.io/kylescudder/balm-auth`, and attests the
-immutable manifest. A signed webhook asks Herman to deploy it. The workflow
+immutable manifest. A signed webhook asks the host to deploy it. The workflow
 succeeds only when public `/health` reports that exact commit.
 The existing tagged macOS Release and iOS/TestFlight workflows are independent.
 
 ## Host and public URLs
 
-- Checkout: `/Users/kyle/platform/apps/balm-auth` on `herman.local` / `herman-1`.
+- Checkout: `/Users/kyle/platform/apps/balm-auth` on the host.
 - Auth: `https://auth.getbalm.app`, upstream `balm-auth:3000`.
 - Hook: `https://deploy-auth.getbalm.app/hooks/balm-auth`.
-- LaunchAgent: `com.herman.balm-auth-deploy`, running as Kyle, the Colima owner.
+- LaunchAgent: `com.kylescudder.balm-auth-deploy`, running as Kyle, the Colima owner.
+- Deployer: `deploy/host-deploy.py` holds this app's settings and hooks; the
+  shared flow is `deploy/deploy_core.py`, vendored unchanged from
+  `kylescudder/deploy-core` (see `deploy/deploy_core.lock`). Change the core
+  there and sync it; CI fails if the vendored copy is edited here.
 - Runtime: Bun 1.3.13 pinned by digest; no database or persistent application volume.
 
 Native builds use `https://auth.getbalm.app`. Previously installed binaries keep
@@ -60,7 +64,7 @@ environment, never in repository files or chat. Repository variables:
 - `DEPLOY_ENABLED=true` enables deployment after publication.
 - `AUTH_BASE_URL=https://auth.getbalm.app` selects public verification.
 
-On Herman, `.env` holds the immutable `BALM_AUTH_IMAGE`, `ATLASSIAN_CLIENT_ID`,
+On the host, `.env` holds the immutable `BALM_AUTH_IMAGE`, `ATLASSIAN_CLIENT_ID`,
 `ATLASSIAN_CLIENT_SECRET` and optional `PLATFORM_WEB_NETWORK`.
 `.env.deploy-hook` holds the queue/secret paths and UID/GID 501:20.
 `secrets/deploy-webhook-secret` is the HMAC key. Files are 0600, private
@@ -74,10 +78,10 @@ From the checkout:
 
 ```sh
 docker compose -f deploy/compose.deploy-hook.yaml --env-file .env.deploy-hook up -d --wait
-python3 -B deploy/install-launchd.py
-launchctl print gui/501/com.herman.balm-auth-deploy
+python3 -B deploy/host-deploy.py --install <host LocalHostName>
+launchctl print gui/501/com.kylescudder.balm-auth-deploy
 tail -n 100 state/deploy.log
-./deploy/herman-deploy.sh sha256:<verified-main-digest>
+./deploy/host-deploy.sh sha256:<verified-main-digest>
 ```
 
 Pause requests with `gh variable set DEPLOY_ENABLED --body false --repo kylescudder/balm`.
@@ -92,7 +96,7 @@ boundary. Keep changes to these files separate from routine BFF releases.
 
 No self-hosted GitHub runner is installed. Kyle's login session and Colima must
 be running; FileVault requires unlock after a host reboot. Use the platform
-runbook and Herman skills for health, backups, hostnames and recovery.
+runbook and the host skills for health, backups, hostnames and recovery.
 
 ## Provision Cloudflare Access
 

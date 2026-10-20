@@ -2,7 +2,7 @@
   base = "Site"
   command = "bun run build"
   publish = "dist"
-  # Hosting moved to Herman. Retain the old published site for rollback only.
+  # Hosting moved to the host. Retain the old published site for rollback only.
   ignore = "exit 0"
 
 [[headers]]

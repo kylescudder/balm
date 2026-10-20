@@ -1,7 +1,7 @@
 // Balm-Site deploy webhook receiver. Internet-facing via Cloudflare Tunnel and
 // Caddy, so it has no Docker access: it verifies a signed request and drops it
 // into a spool directory. An event-driven host service picks it up and runs
-// deploy/site/herman-deploy.sh, which verifies the image attestation itself.
+// deploy/site/host-deploy.sh, which verifies the image attestation itself.
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { readFileSync, readdirSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
 import { createServer } from "node:http";

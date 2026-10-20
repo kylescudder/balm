@@ -1,10 +1,17 @@
-# Balm marketing on Herman
+# Balm marketing on the host
 
 `https://getbalm.app` serves the static Astro output from `Site/` in a small
 Caddy container. Every push to main runs `deploy-site.yml`: build/format checks,
 AMD64 and ARM64 image builds, publication of `ghcr.io/kylescudder/balm-site`,
 GitHub provenance attestation, a signed webhook and public revision acceptance.
 The auth workflow is independent and both run on main changes.
+
+## Deployer
+
+`deploy/site/host-deploy.py` holds this app's settings and hooks; the
+shared flow is `deploy/site/deploy_core.py`, vendored unchanged from
+`kylescudder/deploy-core` (see `deploy/site/deploy_core.lock`). Change the core
+there and sync it; CI fails if the vendored copy is edited here.
 
 ## Configuration and security
 
@@ -32,7 +39,7 @@ contains absolute queue/secret paths and UID/GID 501:20.
 private directories 0700, and excluded from Git. No auth backend credential is
 copied into the marketing checkout or image.
 
-`com.herman.balm-site-deploy` is an event-driven launchd agent, running as
+`com.kylescudder.balm-site-deploy` is an event-driven launchd agent, running as
 Kyle (the Colima owner). It verifies image provenance for this repository's
 `deploy-site.yml`, main and hosted runners before applying a digest. Failed
 health checks restore the previous image; each success pins the digest in `.env`
@@ -44,10 +51,10 @@ From the checkout:
 
 ```sh
 docker compose -f deploy/site/compose.deploy-hook.yaml --env-file .env.deploy-hook up -d --wait
-python3 -B deploy/site/install-launchd.py
-launchctl print gui/501/com.herman.balm-site-deploy
+python3 -B deploy/site/host-deploy.py --install <host LocalHostName>
+launchctl print gui/501/com.kylescudder.balm-site-deploy
 tail -n 100 state/deploy.log
-./deploy/site/herman-deploy.sh sha256:<verified-main-digest>
+./deploy/site/host-deploy.sh sha256:<verified-main-digest>
 ```
 
 Pause with `gh variable set SITE_DEPLOY_ENABLED --body false --repo kylescudder/balm`.

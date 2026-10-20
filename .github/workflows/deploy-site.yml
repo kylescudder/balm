@@ -117,8 +117,8 @@ jobs:
           DIGEST: ${{ steps.manifest.outputs.digest }}
         run: docker buildx imagetools create -t "$IMAGE:main" "$IMAGE@$DIGEST"
 
-  # Asks Herman to deploy the attested digest, then waits for the public site to
-  # report this commit. Herman verifies the attestation itself, so the webhook
+  # Asks the host to deploy the attested digest, then waits for the public site to
+  # report this commit. The host verifies the attestation itself, so the webhook
   # secret can only ever trigger a release that this workflow built from main.
   deploy:
     needs: publish
@@ -187,5 +187,5 @@ jobs:
             fi
             sleep 10
           done
-          echo "::error::Production did not report $GITHUB_SHA within 10 minutes (last: ${revision:-none}). Check state/deploy.log on Herman."
+          echo "::error::Production did not report $GITHUB_SHA within 10 minutes (last: ${revision:-none}). Check state/deploy.log on the host."
           exit 1
