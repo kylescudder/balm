@@ -1,5 +1,20 @@
 # Balm marketing on the host
 
+## Shared deployment service
+
+This app is registered as `balm-site` in the central deployment registry
+`/Users/kyle/platform/deploy-core/apps.json`. LaunchAgent
+`com.kylescudder.deploy-core` runs the single installed engine. Application hooks
+are not needed; the receiver, credentials, queues,
+state and database contracts below remain app-specific. Manual deployment uses
+`./deploy/site/host-deploy.sh sha256:<digest>`.
+
+Engine updates, application registration, failure inspection and service rollback
+are documented in [deploy-core](https://github.com/kylescudder/deploy-core).
+There are no vendored engine files, lock files or sync PRs. Do not install an
+app-specific LaunchAgent. Apply future engine changes once through the central service.
+
+
 `https://getbalm.app` serves the static Astro output from `Site/` in a small
 Caddy container. Every push to main runs `deploy-site.yml`: build/format checks,
 AMD64 and ARM64 image builds, publication of `ghcr.io/kylescudder/balm-site`,
@@ -8,10 +23,7 @@ The auth workflow is independent and both run on main changes.
 
 ## Deployer
 
-`deploy/site/host-deploy.py` holds this app's settings and hooks; the
-shared flow is `deploy/site/deploy_core.py`, vendored unchanged from
-`kylescudder/deploy-core` (see `deploy/site/deploy_core.lock`). Change the core
-there and sync it; CI fails if the vendored copy is edited here.
+`application hooks` holds this app's settings and hooks; the
 
 ## Configuration and security
 
@@ -39,7 +51,7 @@ contains absolute queue/secret paths and UID/GID 501:20.
 private directories 0700, and excluded from Git. No auth backend credential is
 copied into the marketing checkout or image.
 
-`com.kylescudder.balm-site-deploy` is an event-driven launchd agent, running as
+`com.kylescudder.deploy-core` is an event-driven launchd agent, running as
 Kyle (the Colima owner). It verifies image provenance for this repository's
 `deploy-site.yml`, main and hosted runners before applying a digest. Failed
 health checks restore the previous image; each success pins the digest in `.env`
@@ -51,8 +63,7 @@ From the checkout:
 
 ```sh
 docker compose -f deploy/site/compose.deploy-hook.yaml --env-file .env.deploy-hook up -d --wait
-python3 -B deploy/site/host-deploy.py --install <host LocalHostName>
-launchctl print gui/501/com.kylescudder.balm-site-deploy
+launchctl print gui/501/com.kylescudder.deploy-core
 tail -n 100 state/deploy.log
 ./deploy/site/host-deploy.sh sha256:<verified-main-digest>
 ```
