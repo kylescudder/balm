@@ -1,5 +1,20 @@
 # Balm auth on the host
 
+## Shared deployment service
+
+This app is registered as `balm-auth` in the central deployment registry
+`/Users/kyle/platform/deploy-core/apps.json`. LaunchAgent
+`com.kylescudder.deploy-core` runs the single installed engine. Application hooks
+are not needed; the receiver, credentials, queues,
+state and database contracts below remain app-specific. Manual deployment uses
+`./deploy/host-deploy.sh sha256:<digest>`.
+
+Engine updates, application registration, failure inspection and service rollback
+are documented in [deploy-core](https://github.com/kylescudder/deploy-core).
+There are no vendored engine files, lock files or sync PRs. Do not install an
+app-specific LaunchAgent. Apply future engine changes once through the central service.
+
+
 Every push to `main` runs **Deploy auth**, including changes outside `Server/`.
 CI tests and typechecks the BFF, tests the webhook and deployer, builds native
 AMD64/ARM64 images, publishes `ghcr.io/kylescudder/balm-auth`, and attests the
@@ -12,11 +27,8 @@ The existing tagged macOS Release and iOS/TestFlight workflows are independent.
 - Checkout: `/Users/kyle/platform/apps/balm-auth` on the host.
 - Auth: `https://auth.getbalm.app`, upstream `balm-auth:3000`.
 - Hook: `https://deploy-auth.getbalm.app/hooks/balm-auth`.
-- LaunchAgent: `com.kylescudder.balm-auth-deploy`, running as Kyle, the Colima owner.
-- Deployer: `deploy/host-deploy.py` holds this app's settings and hooks; the
-  shared flow is `deploy/deploy_core.py`, vendored unchanged from
-  `kylescudder/deploy-core` (see `deploy/deploy_core.lock`). Change the core
-  there and sync it; CI fails if the vendored copy is edited here.
+- LaunchAgent: `com.kylescudder.deploy-core`, running as Kyle, the Colima owner.
+- Deployer: the centrally installed service; application behavior lives in `hooks.py`.
 - Runtime: Bun 1.3.13 pinned by digest; no database or persistent application volume.
 
 Native builds use `https://auth.getbalm.app`. Previously installed binaries keep
@@ -78,8 +90,7 @@ From the checkout:
 
 ```sh
 docker compose -f deploy/compose.deploy-hook.yaml --env-file .env.deploy-hook up -d --wait
-python3 -B deploy/host-deploy.py --install <host LocalHostName>
-launchctl print gui/501/com.kylescudder.balm-auth-deploy
+launchctl print gui/501/com.kylescudder.deploy-core
 tail -n 100 state/deploy.log
 ./deploy/host-deploy.sh sha256:<verified-main-digest>
 ```
