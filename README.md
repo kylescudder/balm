@@ -74,7 +74,9 @@ Tagged releases (`vX.Y.Z`) are built by CI (`.github/workflows/release.yml`) and
 
 ## License
 
-Copyright © 2026 Kyle Scudder. All rights reserved.
+Licensed under the [MIT License](LICENSE).
+
+Copyright © 2026 Kyle Scudder.
 
 ### Automatic auth deployment
 
