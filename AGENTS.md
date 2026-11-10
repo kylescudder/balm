@@ -110,7 +110,7 @@ There is no Swift linter or formatter configured. Do not invent additional valid
 
 - `Server/` is a Bun/Hono service with only native token exchange, token refresh, and health endpoints. Every push to `main` runs `.github/workflows/deploy-auth.yml`; see `deploy/README.md` for the host image deployment and rollback contract. Its committed `Server/bun.lock` must be kept current. It must keep the Atlassian client secret server-side. CORS is currently broad; treat any expansion beyond token brokering as a security-sensitive server change.
 - `Site/` is a static Astro site. `BaseLayout` owns global structure, document metadata, header, and footer; privacy, terms, and support are product behavior contracts and must track changes to authentication, data handling, analytics, notifications, and support contact behavior.
-- The static marketing site deploys to `getbalm.app` through `.github/workflows/deploy-site.yml`; see `deploy/site/README.md`. Netlify builds are disabled by its ignore rule. Both auth and marketing deploy through separate Cloudflare Access-protected webhooks under `getbalm.app`.
+- The static marketing site deploys to `getbalm.app` through `.github/workflows/deploy-site.yml`; see `Site/README.md`. Both auth and marketing deploy through separate Cloudflare Access-protected webhooks under `getbalm.app`.
 - Runtime artwork belongs with its consumer: native assets in `Balm/Assets.xcassets`, web assets in `Site/public/assets`. There is no separate top-level branding source directory.
 
 ## Strict concurrency
@@ -130,4 +130,4 @@ The app folder is `Balm/`, the nested package is `Balm/BalmCore/`, the marketing
 
 ## What not to commit
 
-Do not commit `Config/Secrets.xcconfig`, local `Server/.env*` files other than the example template, `Balm.xcodeproj/`, `build/`, `DerivedData/`, `.build/`, `.swiftpm/`, `Package.resolved`, `node_modules/`, `Site/.astro/`, `Site/dist/`, `.netlify/`, signing certificates, provisioning profiles, or App Store Connect keys. These are git-ignored where applicable; do not add overrides.
+Do not commit `Config/Secrets.xcconfig`, local `Server/.env*` files other than the example template, `Balm.xcodeproj/`, `build/`, `DerivedData/`, `.build/`, `.swiftpm/`, `Package.resolved`, `node_modules/`, `Site/.astro/`, `Site/dist/`, signing certificates, provisioning profiles, or App Store Connect keys. These are git-ignored where applicable; do not add overrides.
