@@ -1,6 +1,6 @@
-import { defineConfig } from "astro/config";
+import { defineConfig } from 'astro/config'
 
 export default defineConfig({
-  site: "https://getbalm.app",
-  output: "static",
-});
+  site: 'https://getbalm.app',
+  output: 'static'
+})
