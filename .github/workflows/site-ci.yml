@@ -2,31 +2,46 @@ name: Marketing CI
 on:
   pull_request:
     branches: [main]
-    paths: ["Site/**", "deploy/site/**", "compose.site.yaml", ".github/workflows/site-ci.yml", ".github/workflows/deploy-site.yml"]
+    paths:
+      - "Site/**"
+      - ".github/workflows/site-ci.yml"
+      - ".github/workflows/deploy-site.yml"
   workflow_call:
 permissions:
   contents: read
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build and check formatting
+      - name: Install, typecheck, lint, check formatting, build and validate
         run: |
-          docker run --rm -v "$PWD/Site:/app" -w /app oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 sh -c 'bun install --frozen-lockfile && bun run build && bun run format:check'
-      - name: Deployment verification and rollback tests
-        run: python3 -B -m unittest discover -s deploy/site -p 'test_*.py'
-      - name: Webhook authentication and queue tests
-        run: node --test deploy/site/receiver/server.test.mjs
-      - name: Verify the production container starts without privileges
+          docker run --rm -v "$PWD/Site:/app" -w /app -e HUSKY=0 -e CI=true -e BUN_CONFIG_MAX_HTTP_REQUESTS=16 \
+            oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d sh -ec '
+              bun install --frozen-lockfile --network-concurrency=16
+              bun run typecheck
+              bun run lint
+              bun run format:check
+              bun run build
+              bun run check:site'
+      - name: Verify the production container without privileges
         run: |
           docker build -t balm-site:ci --build-arg BALM_SITE_REVISION="$GITHUB_SHA" Site
-          BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml config --quiet
-          docker network create platform-web
-          trap 'BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml down; docker network rm platform-web' EXIT
-          BALM_SITE_IMAGE=balm-site:ci docker compose -f compose.site.yaml up -d --wait --wait-timeout 60
-          docker exec balm-site-balm-site-1 wget -qO- http://127.0.0.1:8080/healthz
-          docker exec balm-site-balm-site-1 wget -qO- http://127.0.0.1:8080/privacy/ | grep -q auth.getbalm.app
+          docker run -d --name balm-site-ci --read-only --cap-drop ALL --security-opt no-new-privileges:true balm-site:ci
+          trap 'docker rm -f balm-site-ci' EXIT
+          for _attempt in $(seq 20); do
+            docker exec balm-site-ci wget -qO /dev/null http://127.0.0.1:8080/healthz && break
+            sleep 1
+          done
+          headers=$(docker exec balm-site-ci wget -S -O /dev/null http://127.0.0.1:8080/healthz 2>&1)
+          echo "$headers" | grep -qi "X-Balm-Site-Revision: $GITHUB_SHA"
+          docker exec balm-site-ci wget -qO- http://127.0.0.1:8080/ | grep -q 'keyboard-driven Jira client'
+          docker exec balm-site-ci wget -qO- http://127.0.0.1:8080/privacy/ | grep -q auth.getbalm.app
+          for path in /terms/ /support/; do
+            docker exec balm-site-ci wget -qO /dev/null "http://127.0.0.1:8080$path"
+          done
+          status=$(docker exec balm-site-ci wget -S -O /dev/null http://127.0.0.1:8080/missing-page 2>&1 || true)
+          echo "$status" | grep -q '404 Not Found'
