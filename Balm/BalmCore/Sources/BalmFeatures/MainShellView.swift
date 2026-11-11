@@ -27,6 +27,12 @@ enum AppTab: Hashable {
     case view(UUID)
 }
 
+enum IssueNavigationPolicy {
+    static func compactColumn(afterSelectingIssue hasSelection: Bool) -> NavigationSplitViewColumn {
+        hasSelection ? .detail : .sidebar
+    }
+}
+
 /// The app shell. macOS: a sidebar of places, the list or board in the middle,
 /// and the issue in an inspector that works over both. iOS and iPadOS: a tab
 /// view that becomes a sidebar on iPad, with detail in a split view.
@@ -48,6 +54,8 @@ public struct MainShellView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     #else
     @State private var tab: AppTab = .issues
+    @State private var issuesCompactColumn: NavigationSplitViewColumn = .sidebar
+    @State private var inboxCompactColumn: NavigationSplitViewColumn = .sidebar
     #endif
 
     public init() {}
@@ -376,7 +384,7 @@ public struct MainShellView: View {
     }
 
     private func issuesTab(project: JiraProject, stores: ProjectStores) -> some View {
-        NavigationSplitView {
+        NavigationSplitView(preferredCompactColumn: $issuesCompactColumn) {
             IssueListView(
                 project: project,
                 filterStore: stores.filter,
@@ -394,10 +402,20 @@ public struct MainShellView: View {
                 EmptyInspectorView()
             }
         }
+        .onChange(of: selectedIssue, initial: true) { _, issue in
+            issuesCompactColumn = IssueNavigationPolicy.compactColumn(
+                afterSelectingIssue: issue != nil
+            )
+        }
+        .onChange(of: issuesCompactColumn) { _, column in
+            if column == .sidebar {
+                selectedIssue = nil
+            }
+        }
     }
 
     private var inboxTab: some View {
-        NavigationSplitView {
+        NavigationSplitView(preferredCompactColumn: $inboxCompactColumn) {
             InboxListView(openedIssueKey: inboxIssue?.key, onOpen: { inboxIssue = $0 })
         } detail: {
             if let issue = inboxIssue {
@@ -405,6 +423,16 @@ public struct MainShellView: View {
                     .id(issue.key)
             } else {
                 EmptyInspectorView()
+            }
+        }
+        .onChange(of: inboxIssue, initial: true) { _, issue in
+            inboxCompactColumn = IssueNavigationPolicy.compactColumn(
+                afterSelectingIssue: issue != nil
+            )
+        }
+        .onChange(of: inboxCompactColumn) { _, column in
+            if column == .sidebar {
+                inboxIssue = nil
             }
         }
     }

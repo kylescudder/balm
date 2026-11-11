@@ -22,6 +22,7 @@ public enum IssueViewMode: String, CaseIterable, Identifiable, Sendable {
 /// inspector or the split view's detail column.
 public struct IssueListView: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.openIssue) private var openIssue
 
     @Binding private var selection: JiraIssue?
     private let onOpenSettings: (() -> Void)?
@@ -296,8 +297,9 @@ public struct IssueListView: View {
             ForEach(IssueListViewModel.healthSections(from: filteredIssues)) { section in
                 Section {
                     ForEach(section.issues, id: \.self) { issue in
-                        IssueRowView(issue: issue)
-                            .tag(issue)
+                        issueRow(issue) {
+                            IssueRowView(issue: issue)
+                        }
                     }
                 } header: {
                     sectionHeader(section)
@@ -318,6 +320,30 @@ public struct IssueListView: View {
                 .monospacedDigit()
         }
         .textCase(nil)
+    }
+
+    /// A list tag is selection metadata, not a navigation action. On iOS the
+    /// row must explicitly open the issue so a collapsed split view advances
+    /// to its detail column. macOS keeps native list-selection behaviour for
+    /// keyboard navigation and the inspector.
+    @ViewBuilder
+    private func issueRow<Label: View>(
+        _ issue: JiraIssue,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        #if os(macOS)
+        label()
+            .tag(issue)
+        #else
+        Button {
+            openIssue(issue)
+        } label: {
+            label()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .tag(issue)
+        #endif
     }
 
     private var platformListStyle: some ListStyle {
@@ -405,8 +431,9 @@ public struct IssueListView: View {
             if hasLocal {
                 Section {
                     ForEach(filteredIssues, id: \.self) { issue in
-                        IssueRowView(issue: issue)
-                            .tag(issue)
+                        issueRow(issue) {
+                            IssueRowView(issue: issue)
+                        }
                     }
                 } header: {
                     resultsHeader(systemImage: "list.bullet", title: "In this view", count: filteredIssues.count)
@@ -437,12 +464,13 @@ public struct IssueListView: View {
                     ForEach(hiddenGroups) { group in
                         Section {
                             ForEach(group.results) { result in
-                                HiddenResultRow(
-                                    issue: result.issue,
-                                    systemImage: group.kind.systemImage,
-                                    detail: reasonText(for: result)
-                                )
-                                .tag(result.issue)
+                                issueRow(result.issue) {
+                                    HiddenResultRow(
+                                        issue: result.issue,
+                                        systemImage: group.kind.systemImage,
+                                        detail: reasonText(for: result)
+                                    )
+                                }
                             }
                         } header: {
                             resultsHeader(
