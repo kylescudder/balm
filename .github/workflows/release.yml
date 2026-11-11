@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       # Write-scoped SSH deploy key for kylescudder/homebrew-tap, used to auto-bump
       # the cask on release. Stored as the HOMEBREW_TAP_SSH_KEY repo secret.
