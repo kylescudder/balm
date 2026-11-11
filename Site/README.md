@@ -1,40 +1,50 @@
-# Balm site
+# Balm website
 
-Static site for getbalm.app — landing page plus the privacy,
-terms, and support pages Atlassian's app distribution form requires.
-Built with Astro. The generated site is static and ships no client-side
-JavaScript.
+The static Astro home, privacy, terms and support pages for Balm, including the
+pages Atlassian's app distribution form requires. It ships no client-side
+JavaScript. Public hostname: **getbalm.app** (and `www.getbalm.app`).
 
-## Local preview
+## Development
 
-Install dependencies once:
-
-```sh
-bun install --cwd Site
-```
-
-Run the development server:
+Use Bun 1.4.4. From `Site/`, install the committed dependencies with
+`bun install --frozen-lockfile`. This also installs the pre-commit hook.
 
 ```sh
 bun run dev
 ```
 
-Then open `http://localhost:4321/`.
+Open **http://localhost:4321**. The site has no runtime configuration or
+backend.
 
-## Build
+## Checks
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short:
 
 ```sh
+bun run format:check
+bun run lint
+bun run typecheck
 bun run build
+bun run check:site   # pages, the auth service in the privacy policy, built assets
 ```
 
-The deployable files are written to `dist/`.
+## Deployment
 
-## Hosting
+Merging a change under `Site/` to `main` runs `deploy-site.yml`: it repeats the
+checks, builds an attested AMD64/ARM64 image (`ghcr.io/kylescudder/balm-site`)
+and asks Herman's deploy-core service to deploy that digest through
+`https://deploy-site.getbalm.app/hooks/balm-site`. The image serves `dist/` from
+an unprivileged, read-only Caddy container on port 8080 and reports the deployed
+commit in `X-Balm-Site-Revision` on `/healthz`. Herman checks the attestation and
+the pages before switching and keeps the previous image for rollback. The
+workflow waits until Herman acknowledges the image and the public site reports
+the new commit. Run the workflow manually to redeploy.
 
-Every push to main builds an attested image and deploys to the host through an
-Access-protected webhook. See [marketing deployment](../deploy/site/README.md).
-The public site is `https://getbalm.app`. Netlify builds are disabled; its old
-published copy is retained only for rollback.
+The main-only `marketing-production` environment holds `CF_ACCESS_CLIENT_ID`,
+`CF_ACCESS_CLIENT_SECRET` and `DEPLOY_WEBHOOK_SECRET`. The repository variables
+`SITE_DEPLOY_ENABLED=true` and `SITE_BASE_URL` turn on the deploy job and name
+the public origin it checks. Host setup and recovery are in Herman's platform
+runbook.
 
 ## URLs for the Atlassian developer console
 

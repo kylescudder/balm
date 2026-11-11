@@ -39,9 +39,6 @@ Config/Secrets.xcconfig
 .env.local
 .env.*.local
 
-## Netlify
-.netlify/
-
 ## Local tooling
 .claude/settings.local.json
 

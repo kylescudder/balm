@@ -82,4 +82,4 @@ Copyright © 2026 Kyle Scudder.
 
 Every push to `main` tests and publishes the auth backend, then deploys its
 verified image to the host and checks the live revision. The marketing site also deploys on main through its own Access-protected pipeline
-(see [marketing deployment](deploy/site/README.md)). Native app releases remain separate. See [host deployment and rollback](deploy/README.md).
+(see [marketing deployment](Site/README.md#deployment)). Native app releases remain separate. See [host deployment and rollback](deploy/README.md).
