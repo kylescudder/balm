@@ -12,4 +12,7 @@ ARG BALM_AUTH_REVISION=development
 ENV NODE_ENV=production PORT=3000 BALM_AUTH_REVISION=${BALM_AUTH_REVISION}
 USER bun
 EXPOSE 3000
+# Health ownership: deploy/healthcheck.md at the repository root.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["bun", "-e", "const r = await fetch('http://127.0.0.1:3000/health', { signal: AbortSignal.timeout(3000) }); if (!r.ok) process.exit(1)"]
 CMD ["bun", "src/index.ts"]
