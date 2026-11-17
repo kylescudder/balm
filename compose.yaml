@@ -6,7 +6,7 @@ services:
     environment:
       ATLASSIAN_CLIENT_ID: ${ATLASSIAN_CLIENT_ID:?required}
       ATLASSIAN_CLIENT_SECRET: ${ATLASSIAN_CLIENT_SECRET:?required}
-      PORT: "3000"
+      PORT: '3000'
       NODE_ENV: production
     networks:
       web:
@@ -17,17 +17,12 @@ services:
     mem_limit: 128m
     cpus: 0.5
     pids_limit: 64
-    healthcheck:
-      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    # Inherit the health check shipped with the application image.
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
 networks:
   web:
     external: true
